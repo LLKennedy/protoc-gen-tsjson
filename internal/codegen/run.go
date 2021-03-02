@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/LLKennedy/protoc-gen-tsjson/internal/version"
 	"google.golang.org/protobuf/proto"
@@ -41,24 +42,45 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
-	var out string
+	var out *pluginpb.CodeGeneratorResponse_File
 	for _, file := range request.GetProtoFile() {
 		out, err = generateFullFile(file)
 		if err != nil {
 			return
 		}
-		parsedName := filenameFromProto(file.GetName())
-		outfiles = append(outfiles, &pluginpb.CodeGeneratorResponse_File{
-			Name:    proto.String(parsedName.name + ".ts"),
-			Content: proto.String(out),
-		})
+		outfiles = append(outfiles, out)
 	}
 	return
 }
 
-func generateFullFile(f *descriptorpb.FileDescriptorProto) (string, error) {
-	parsed := file{
-		sourceName: f.GetName(),
+func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGeneratorResponse_File, err error) {
+	parsedName := filenameFromProto(f.GetName())
+	out = &pluginpb.CodeGeneratorResponse_File{
+		Name: proto.String(parsedName.fullWithoutExtension + ".ts"),
 	}
-	return parsed.String(), nil
+	content := &strings.Builder{}
+	content.WriteString(getCodeGenmarker(version.GetVersionString(), protocVersion, f.GetName()))
+	generateEnums(f.GetEnumType(), content)
+	out.Content = proto.String(content.String())
+	return
+}
+
+func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.Builder) {
+	for _, enum := range enums {
+		// TODO: get comment data somehow
+		comment := "An enum"
+		content.WriteString(fmt.Sprintf("/** %s */\nexport enum %s {\n", comment, enum.GetName()))
+		for _, value := range enum.GetValue() {
+			// We don't bother stripping the trailing comma on the last enum element because Typescript doesn't care
+			// TODO: get comment data somehow
+			comment = "An enum value"
+			if value.GetNumber() == 0 {
+				// Special case for 0, as it doesn't get written by protojson since it's the default value
+				content.WriteString(fmt.Sprintf("	/** %s */\n	%s = \"\",\n", comment, value.GetName()))
+			} else {
+				content.WriteString(fmt.Sprintf("	/** %s */\n	%s = \"%s\",\n", comment, value.GetName(), value.GetName()))
+			}
+		}
+		content.WriteString("}\n\n")
+	}
 }

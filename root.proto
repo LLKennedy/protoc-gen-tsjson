@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "sampleproto/core/test.proto";
+
+// The type of the message
+enum RootTypes {
+	// An unsafe default, never to be used intentionally
+	ROOT_TYPE_UNKNOWN = 0;
+	// The normal value
+	ROOT_TYPE_NORMAL = 1;
+	// The abnormal value
+	ROOT_TYPE_ABNORMAL = 2;
+}
+
+// RootMessage is the only message in the top level file, which uses other imported messages to demonstrate linking
+message RootMessage {
+	Test test = 1000;
+	RootTypes type = 1;
+}

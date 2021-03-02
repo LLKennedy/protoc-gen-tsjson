@@ -9,7 +9,8 @@ const codegenmarker = `/**
  * 	protoc            %s
  * source: %s
  */
- `
+
+`
 
 func getCodeGenmarker(version, protocVersion, sourceFile string) string {
 	return fmt.Sprintf(codegenmarker, version, protocVersion, sourceFile)
