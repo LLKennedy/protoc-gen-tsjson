@@ -11,5 +11,5 @@ export interface ProtoJSONCompatible {
 	 *
 	 * e.g. 64-bit numbers as strings, bytes as base64, oneofs as specific instance fields
 	 * */
-	ToProtoJSON(): Object;
+	ToProtoJSON(): Promise<Object>;
 }

@@ -1,0 +1,11 @@
+{
+  "name": "@llkennedy/protoc-gen-tsout-test",
+  "version": "0.1.0",
+  "description": "Test files for protoc-gen-tsout, not intended to be published",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Luke Kennedy",
+  "license": "MIT"
+}
