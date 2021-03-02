@@ -1,0 +1,38 @@
+{
+  "name": "@llkennedy/protoc-gen-tsjson",
+  "version": "0.1.0",
+  "description": "Typescript bindings for canonical JSON representation of gRPC messages.",
+  "main": "exports/lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LLKennedy/protoc-gen-tsjson.git"
+  },
+  "keywords": [
+    "protoc",
+    "protobuf",
+    "grpc",
+    "json",
+    "web",
+    "typescript",
+    "ts",
+    "js",
+    "javascript",
+    "httpgrpc"
+  ],
+  "author": "Luke Kennedy",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LLKennedy/protoc-gen-tsjson/issues"
+  },
+  "homepage": "https://github.com/LLKennedy/protoc-gen-tsjson#readme",
+  "devDependencies": {
+    "typescript": "^4.2.2"
+  },
+  "peerDependencies": {
+    "typescript": "^4.1.3"
+  }
+}
