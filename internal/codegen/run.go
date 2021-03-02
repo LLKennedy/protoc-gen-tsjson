@@ -2,8 +2,10 @@ package codegen
 
 import (
 	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
@@ -22,7 +24,7 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 		return
 	}
 	// Generate the files (do the thing)
-	generatedFiles, err := generateFiles(request)
+	generatedFiles, err := generateAllFiles(request)
 	if err != nil {
 		// It didn't work, ignore any data we generated and only return the error
 		response.Error = proto.String(fmt.Sprintf("failed to generate files: %v", err))
@@ -33,10 +35,23 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 	return
 }
 
-func generateFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
-	outfiles = append(outfiles, &pluginpb.CodeGeneratorResponse_File{
-		Name:    proto.String("out/package.json"),
-		Content: proto.String(`{}`),
-	})
+// Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
+func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
+	var out string
+	for _, file := range request.GetProtoFile() {
+		out, err = generateFullFile(file)
+		if err != nil {
+			return
+		}
+		strings.Split(file.GetName(), "/")
+		outfiles = append(outfiles, &pluginpb.CodeGeneratorResponse_File{
+			Name:    proto.String("out/" + filenameFromProto(file.GetName()).name + ".ts"),
+			Content: proto.String(out),
+		})
+	}
 	return
+}
+
+func generateFullFile(file *descriptorpb.FileDescriptorProto) (string, error) {
+	return "", nil
 }
