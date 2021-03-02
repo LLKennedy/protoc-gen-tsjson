@@ -1,6 +1,10 @@
 package version
 
-import "fmt"
+import (
+	"fmt"
+
+	"google.golang.org/protobuf/types/pluginpb"
+)
 
 const (
 	// Major is the major version of the tool
@@ -13,5 +17,14 @@ const (
 
 // GetVersionString generates a version string based on the constants in this package
 func GetVersionString() string {
-	return fmt.Sprintf("v%d%d%d", Major, Minor, Patch)
+	return fmt.Sprintf("v%d.%d.%d", Major, Minor, Patch)
+}
+
+// FormatProtocVersion formats a protoc version into a version string
+func FormatProtocVersion(v *pluginpb.Version) string {
+	base := fmt.Sprintf("v%d.%d.%d", v.GetMajor(), v.GetMinor(), v.GetPatch())
+	if v.GetSuffix() != "" {
+		return fmt.Sprintf("%s-%s", base, v.GetSuffix())
+	}
+	return base
 }

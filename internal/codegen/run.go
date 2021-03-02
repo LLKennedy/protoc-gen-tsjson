@@ -3,16 +3,21 @@ package codegen
 import (
 	"fmt"
 
+	"github.com/LLKennedy/protoc-gen-tsjson/internal/version"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
+
+var protocVersion = "unknown"
 
 // At time of writing, the only feature that can be marked as supported is restoring the "optional" keyword to proto3, still an experimental feature that is out of scope for this project.
 var support uint64 = uint64(pluginpb.CodeGeneratorResponse_FEATURE_NONE)
 
 // Run performs code generation on the input data
 func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGeneratorResponse) {
+	// Set runtime version of protoc
+	protocVersion = version.FormatProtocVersion(request.GetCompilerVersion())
 	// Create a basic response with our feature support (none, see above)
 	response = &pluginpb.CodeGeneratorResponse{
 		SupportedFeatures: &support,
@@ -51,6 +56,9 @@ func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*plugi
 	return
 }
 
-func generateFullFile(file *descriptorpb.FileDescriptorProto) (string, error) {
-	return "", nil
+func generateFullFile(f *descriptorpb.FileDescriptorProto) (string, error) {
+	parsed := file{
+		sourceName: f.GetName(),
+	}
+	return parsed.String(), nil
 }
