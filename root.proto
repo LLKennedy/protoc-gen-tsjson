@@ -16,4 +16,10 @@ enum RootTypes {
 message RootMessage {
 	Test test = 1000;
 	RootTypes type = 1;
+	message Stuff {
+		int64 a = 1;
+		string b = 2;
+		bool c = 3;
+	};
+	Stuff stuff = 3;
 }
