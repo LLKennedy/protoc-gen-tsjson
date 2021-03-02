@@ -7,5 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Luke Kennedy",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@llkennedy/protoc-gen-tsjson": "^0.2.1"
+  }
 }

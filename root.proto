@@ -22,4 +22,6 @@ message RootMessage {
 		bool c = 3;
 	};
 	Stuff stuff = 3;
+	repeated string names = 4;
+	map<int32, string> data = 5;
 }

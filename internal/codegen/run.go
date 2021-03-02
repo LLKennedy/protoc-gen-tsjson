@@ -115,46 +115,11 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 		// TODO: get comment data somehow
 		comment := "A message"
 		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s {\n", comment, message.GetName()))
-		var tsType string
-		var tsDefault string
 		for _, field := range message.GetField() {
-			switch field.GetType() {
-			case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
-				descriptorpb.FieldDescriptorProto_TYPE_FLOAT,
-				descriptorpb.FieldDescriptorProto_TYPE_INT64,
-				descriptorpb.FieldDescriptorProto_TYPE_UINT64,
-				descriptorpb.FieldDescriptorProto_TYPE_INT32,
-				descriptorpb.FieldDescriptorProto_TYPE_FIXED64,
-				descriptorpb.FieldDescriptorProto_TYPE_FIXED32,
-				descriptorpb.FieldDescriptorProto_TYPE_UINT32,
-				descriptorpb.FieldDescriptorProto_TYPE_SFIXED32,
-				descriptorpb.FieldDescriptorProto_TYPE_SFIXED64,
-				descriptorpb.FieldDescriptorProto_TYPE_SINT32,
-				descriptorpb.FieldDescriptorProto_TYPE_SINT64:
-				// Javascript only has one number format
-				tsType = "number"
-				tsDefault = "0"
-			case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
-				tsType = "boolean"
-				tsDefault = "false"
-			case descriptorpb.FieldDescriptorProto_TYPE_STRING:
-				tsType = "string"
-				tsDefault = `""`
-			case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
-				tsType = "Uint8Array"
-				tsDefault = "new Uint8Array(0)"
-			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-				// TODO: special case
-				tsType = "undefined"
-				tsDefault = "undefined"
-			case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
-				// TODO: special case
-				tsType = "undefined"
-				tsDefault = "undefined"
-			}
+			tsType := getNativeTypeName(field, message.GetNestedType())
 			// TODO: get comment data somehow
 			comment = "A field"
-			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s: %s = %s;\n", comment, field.GetName(), tsType, tsDefault))
+			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetName(), tsType))
 		}
 		message.GetNestedType()
 		content.WriteString("}\n\n")
@@ -167,4 +132,49 @@ func generateServices(services []*descriptorpb.ServiceDescriptorProto, content *
 
 func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *strings.Builder) {
 
+}
+
+func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, nestedTypes []*descriptorpb.DescriptorProto) string {
+	switch field.GetType() {
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
+		descriptorpb.FieldDescriptorProto_TYPE_FLOAT,
+		descriptorpb.FieldDescriptorProto_TYPE_INT64,
+		descriptorpb.FieldDescriptorProto_TYPE_UINT64,
+		descriptorpb.FieldDescriptorProto_TYPE_INT32,
+		descriptorpb.FieldDescriptorProto_TYPE_FIXED64,
+		descriptorpb.FieldDescriptorProto_TYPE_FIXED32,
+		descriptorpb.FieldDescriptorProto_TYPE_UINT32,
+		descriptorpb.FieldDescriptorProto_TYPE_SFIXED32,
+		descriptorpb.FieldDescriptorProto_TYPE_SFIXED64,
+		descriptorpb.FieldDescriptorProto_TYPE_SINT32,
+		descriptorpb.FieldDescriptorProto_TYPE_SINT64:
+		// Javascript only has one number format
+		return "number"
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		return "boolean"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		return "string"
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		return "Uint8Array"
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		// TODO: this lookup is not efficient, but it'll do for now. building a map of known types by name as we go would be good
+		for _, nestedMessage := range nestedTypes {
+			// FIXME: this *will* misfire at least sometimes, though we'll see if it particularly matters
+			if nestedMessage.GetOptions().GetMapEntry() && strings.Contains(field.GetTypeName(), nestedMessage.GetName()) {
+				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil)
+				valType := getNativeTypeName(nestedMessage.GetField()[1], nil)
+				return fmt.Sprintf("Map<%s, %s>", keyType, valType)
+			}
+		}
+		// Not a map
+		fallthrough
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		return strings.TrimPrefix(field.GetTypeName(), ".")
+	default:
+		panic(fmt.Errorf("unknown field type: %s", field))
+	}
+}
+
+func getProtoJSONTypeName(field *descriptorpb.FieldDescriptorProto, nestedTypes []*descriptorpb.DescriptorProto) string {
+	panic("not implemented")
 }
