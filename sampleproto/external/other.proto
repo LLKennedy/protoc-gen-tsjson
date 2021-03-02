@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+message OtherThing {
+	bytes data = 1;
+	UsedThing thing = 2;
+}
+
+message UnusedThing {
+	uint64 some_number = 7;
+}
+
+message UsedThing {
+	string name = 12;
+}

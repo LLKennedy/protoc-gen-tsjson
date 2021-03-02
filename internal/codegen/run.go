@@ -2,7 +2,7 @@ package codegen
 
 import (
 	"fmt"
-	"strings"
+	"log"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -38,14 +38,15 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
 	var out string
+	log.Println(request.String())
 	for _, file := range request.GetProtoFile() {
 		out, err = generateFullFile(file)
 		if err != nil {
 			return
 		}
-		strings.Split(file.GetName(), "/")
+		parsedName := filenameFromProto(file.GetName())
 		outfiles = append(outfiles, &pluginpb.CodeGeneratorResponse_File{
-			Name:    proto.String("out/" + filenameFromProto(file.GetName()).name + ".ts"),
+			Name:    proto.String(parsedName.name + ".ts"),
 			Content: proto.String(out),
 		})
 	}
