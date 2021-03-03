@@ -80,14 +80,14 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGe
 
 func generateDependencies(deps []string, content *strings.Builder) {
 	// FIXME: this pattern probably doesn't work at all for deps, I think we need to return structs that get imports added over time
-	// for _, dep := range deps {
-	// TODO: get comment data somehow
-	// 	comment := ""
-	// 	name := filenameFromProto(dep)
-	// 	content.WriteString(fmt.Sprintf("/** %s */\nimport {} from \"%s\";\n", comment, name.fullWithoutExtension))
-	// }
-	// content.WriteString("\n")
-	content.WriteString("// TODO: imports\n\n")
+	for _, dep := range deps {
+		// TODO: get comment data somehow
+		comment := ""
+		name := filenameFromProto(dep)
+		content.WriteString(fmt.Sprintf("/** %s */\nimport {} from \"%s\";\n", comment, name.fullWithoutExtension))
+	}
+	content.WriteString("\n")
+	// content.WriteString("// TODO: imports\n\n")
 }
 
 func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.Builder) {
@@ -114,15 +114,29 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 	for _, message := range messages {
 		// TODO: get comment data somehow
 		comment := "A message"
-		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s {\n", comment, message.GetName()))
+		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
 		for _, field := range message.GetField() {
-			tsType := getNativeTypeName(field, message.GetNestedType())
+			tsType := getNativeTypeName(field, message)
 			// TODO: get comment data somehow
 			comment = "A field"
 			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetName(), tsType))
 		}
-		message.GetNestedType()
 		content.WriteString("}\n\n")
+
+		for _, nestedType := range message.GetNestedType() {
+			if !nestedType.GetOptions().GetMapEntry() {
+				// TODO: get comment data somehow
+				comment = "A message"
+				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s_%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
+				for _, nestedField := range nestedType.GetField() {
+					tsType := getNativeTypeName(nestedField, nestedType)
+					// TODO: get comment data somehow
+					comment = "A field"
+					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetName(), tsType))
+				}
+				content.WriteString("}\n\n")
+			}
+		}
 	}
 }
 
@@ -134,7 +148,7 @@ func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *stri
 
 }
 
-func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, nestedTypes []*descriptorpb.DescriptorProto) string {
+func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descriptorpb.DescriptorProto) string {
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
 		descriptorpb.FieldDescriptorProto_TYPE_FLOAT,
@@ -158,7 +172,7 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, nestedTypes []*
 		return "Uint8Array"
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		// TODO: this lookup is not efficient, but it'll do for now. building a map of known types by name as we go would be good
-		for _, nestedMessage := range nestedTypes {
+		for _, nestedMessage := range message.GetNestedType() {
 			// FIXME: this *will* misfire at least sometimes, though we'll see if it particularly matters
 			if nestedMessage.GetOptions().GetMapEntry() && strings.Contains(field.GetTypeName(), nestedMessage.GetName()) {
 				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil)
@@ -169,7 +183,7 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, nestedTypes []*
 		// Not a map
 		fallthrough
 	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
-		return strings.TrimPrefix(field.GetTypeName(), ".")
+		return strings.ReplaceAll(strings.TrimPrefix(field.GetTypeName(), "."), ".", "_")
 	default:
 		panic(fmt.Errorf("unknown field type: %s", field))
 	}
