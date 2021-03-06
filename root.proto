@@ -1,6 +1,19 @@
 syntax = "proto3";
 
 import "sampleproto/core/test.proto";
+import "root2.proto";
+
+// An example service
+service Example {
+	// DoStuff is a unary RPC
+	rpc DoStuff(RootMessage) returns (RootResponse) {}
+	// DoStuff is a client streaming RPC
+	rpc DoStuff2(stream RootMessage) returns (RootResponse) {}
+	// DoStuff3 is a server streaming RPC
+	rpc DoStuff3(RootMessage) returns (stream RootResponse) {}
+	// DoStuff4 is a dual streaming RPC
+	rpc DoStuff4(stream RootMessage) returns (stream RootResponse) {}
+}
 
 // The type of the message
 enum RootTypes {

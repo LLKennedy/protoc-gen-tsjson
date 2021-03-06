@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+message RootResponse {
+	bool result_of_rpc = 2;
+}
