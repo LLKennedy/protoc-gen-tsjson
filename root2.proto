@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package testroot;
+
 message RootResponse {
 	bool result_of_rpc = 2;
 }

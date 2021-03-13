@@ -3,6 +3,8 @@ syntax = "proto3";
 import "sampleproto/core/test.proto";
 import "root2.proto";
 
+package testroot;
+
 // An example service
 service Example {
 	// DoStuff is a unary RPC
@@ -27,7 +29,7 @@ enum RootTypes {
 
 // RootMessage is the only message in the top level file, which uses other imported messages to demonstrate linking
 message RootMessage {
-	Test test = 1000;
+	core.Test test = 1000;
 	RootTypes type = 1;
 	message Stuff {
 		int64 a = 1;

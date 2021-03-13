@@ -2,7 +2,9 @@ syntax = "proto3";
 
 import "sampleproto/external/other.proto";
 
+package core;
+
 message Test {
 	int32 id = 1;
-	OtherThing thing = 2;
+	external.OtherThing thing = 2;
 }

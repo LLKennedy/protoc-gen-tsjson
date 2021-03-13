@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package external;
+
 message OtherThing {
 	bytes data = 1;
 	UsedThing thing = 2;
