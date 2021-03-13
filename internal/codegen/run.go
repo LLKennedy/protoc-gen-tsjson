@@ -125,7 +125,7 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, pkgMap map[string]str
 	content := &strings.Builder{}
 	content.WriteString(getCodeGenmarker(version.GetVersionString(), protocVersion, f.GetName()))
 	// Imports
-	generateDependencies(f.GetDependency(), pkgMap, content)
+	content.WriteString("import * as packages from \"__packages__\";\n\n")
 	// Enums
 	generateEnums(f.GetEnumType(), content)
 	// Messages
@@ -136,13 +136,6 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, pkgMap map[string]str
 	generateComments(f.GetSourceCodeInfo(), content)
 	out.Content = proto.String(content.String())
 	return
-}
-
-func generateDependencies(deps []string, pkgMap map[string]string, content *strings.Builder) {
-	if len(deps) == 0 {
-		return
-	}
-	content.WriteString("import * as packages from \"__packages__\";\n\n")
 }
 
 func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.Builder) {
