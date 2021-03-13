@@ -15,7 +15,7 @@ func main() {
 	// Read input file(s) from stdin
 	reqData, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		panic(fmt.Errorf("tjson: reading from stdin: %v", err))
+		panic(fmt.Errorf("tsjson: reading from stdin: %v", err))
 	}
 
 	req := pluginpb.CodeGeneratorRequest{}
