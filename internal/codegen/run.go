@@ -147,12 +147,7 @@ func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.B
 			// We don't bother stripping the trailing comma on the last enum element because Typescript doesn't care
 			// TODO: get comment data somehow
 			comment = "An enum value"
-			if value.GetNumber() == 0 {
-				// Special case for 0, as it doesn't get written by protojson since it's the default value
-				content.WriteString(fmt.Sprintf("	/** %s */\n	%s = \"\",\n", comment, value.GetName()))
-			} else {
-				content.WriteString(fmt.Sprintf("	/** %s */\n	%s = \"%s\",\n", comment, value.GetName(), value.GetName()))
-			}
+			content.WriteString(fmt.Sprintf("	/** %s */\n	%s = %d,\n", comment, value.GetName(), value.GetNumber()))
 		}
 		content.WriteString("}\n\n")
 	}
