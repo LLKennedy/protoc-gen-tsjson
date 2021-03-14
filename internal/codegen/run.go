@@ -160,6 +160,7 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
 		for _, field := range message.GetField() {
 			tsType := getNativeTypeName(field, message, pkgName)
+			// FIXME: detect repeated
 			// TODO: get comment data somehow
 			comment = "A field"
 			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
@@ -173,6 +174,7 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s__%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
 				for _, nestedField := range nestedType.GetField() {
 					tsType := getNativeTypeName(nestedField, nestedType, pkgName)
+					// FIXME: detect repeated
 					// TODO: get comment data somehow
 					comment = "A field"
 					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetJsonName(), tsType))
