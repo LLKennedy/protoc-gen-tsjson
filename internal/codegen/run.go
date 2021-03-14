@@ -162,7 +162,7 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 			tsType := getNativeTypeName(field, message, pkgName)
 			// TODO: get comment data somehow
 			comment = "A field"
-			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetName(), tsType))
+			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
 		}
 		content.WriteString("}\n\n")
 
@@ -175,7 +175,7 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 					tsType := getNativeTypeName(nestedField, nestedType, pkgName)
 					// TODO: get comment data somehow
 					comment = "A field"
-					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetName(), tsType))
+					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetJsonName(), tsType))
 				}
 				content.WriteString("}\n\n")
 			}
