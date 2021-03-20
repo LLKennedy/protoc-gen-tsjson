@@ -2,6 +2,11 @@ syntax = "proto3";
 
 import "sampleproto/core/test.proto";
 import "root2.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/empty.proto";
 
 package testroot;
 
@@ -39,4 +44,12 @@ message RootMessage {
 	Stuff stuff = 3;
 	repeated string names = 4;
 	map<int32, string> data = 5;
+	google.protobuf.Timestamp ts = 6;
+	google.protobuf.Any any = 7;
+	google.protobuf.Duration dur = 8;
+	google.protobuf.Struct str = 9;
+	google.protobuf.ListValue listval = 13;
+	google.protobuf.Value val = 10;
+	google.protobuf.NullValue nlvl = 11;
+	google.protobuf.Empty empty = 12;
 }
