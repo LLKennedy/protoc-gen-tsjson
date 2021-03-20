@@ -2,11 +2,13 @@ package codegen
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
 	"github.com/LLKennedy/protoc-gen-tsjson/internal/version"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -51,9 +53,23 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 	return
 }
 
+const googlePrefix = ".google."
+
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
 	var out *pluginpb.CodeGeneratorResponse_File
+	// Check all files except google ones have both npm_package and import_path options set
+	for _, file := range request.GetProtoFile() {
+		pkgName := file.GetPackage()
+		if len(pkgName) >= len(googlePrefix) && pkgName[:len(googlePrefix)] == googlePrefix {
+			// Google files are allowed to not have the options, we handle them differently
+			continue
+		}
+		file.GetOptions().ProtoReflect().Range(func(desc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+			log.Println(fmt.Sprintf("%s - %s", desc, val))
+			return true
+		})
+	}
 	for _, file := range request.GetProtoFile() {
 		for _, toGen := range request.GetFileToGenerate() {
 			if file.GetName() == toGen {
