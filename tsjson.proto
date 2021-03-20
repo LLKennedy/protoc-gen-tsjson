@@ -1,6 +1,6 @@
 syntax = "proto3";
-package tjson;
-option (npm_package) = "@llkennedy/protoc-gen-tjson";
+package tsjson;
+option (npm_package) = "@llkennedy/protoc-gen-tsjson";
 
 import "google/protobuf/descriptor.proto";
 
