@@ -60,12 +60,18 @@ func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*plugi
 		outfiles = nil
 		return
 	}
+	request.GetFileToGenerate()
 	for _, file := range request.GetProtoFile() {
-		out, err = generateFullFile(file, pkgMap)
-		if err != nil {
-			return
+		for _, toGen := range request.GetFileToGenerate() {
+			if file.GetName() == toGen {
+				out, err = generateFullFile(file, pkgMap)
+				if err != nil {
+					return
+				}
+				outfiles = append(outfiles, out)
+				break
+			}
 		}
-		outfiles = append(outfiles, out)
 	}
 	return
 }
