@@ -8,6 +8,9 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
 
+option (tsjson.npm_package) = "@llkennedy/protoc-gen-tsjson-samples";
+import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto"; // --proto_path=./node_modules/@llkennedy/protoc-gen-tsjson/
+
 package testroot;
 
 // An example service

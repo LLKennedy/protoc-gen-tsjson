@@ -1,12 +1,12 @@
 syntax = "proto3";
 package tsjson;
 option (npm_package) = "@llkennedy/protoc-gen-tsjson";
-option (proto_version) = "v0.4.0-pre1";
 
 import "google/protobuf/descriptor.proto";
 
 extend google.protobuf.FileOptions {
 	// Specifies an NPM package to use as an import statement when traversing packages
 	string npm_package = 210320;
-	string proto_version = 210321;
+	// Specifies the path from the root of the package to the file
+	string import_path = 210321;
 }

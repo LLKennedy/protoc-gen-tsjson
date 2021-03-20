@@ -54,17 +54,10 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
 	var out *pluginpb.CodeGeneratorResponse_File
-	var pkgMap map[string]string
-	outfiles, pkgMap, err = generatePackages(request)
-	if err != nil {
-		outfiles = nil
-		return
-	}
-	request.GetFileToGenerate()
 	for _, file := range request.GetProtoFile() {
 		for _, toGen := range request.GetFileToGenerate() {
 			if file.GetName() == toGen {
-				out, err = generateFullFile(file, pkgMap)
+				out, err = generateFullFile(file)
 				if err != nil {
 					return
 				}
@@ -119,7 +112,7 @@ func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.C
 	return
 }
 
-func generateFullFile(f *descriptorpb.FileDescriptorProto, pkgMap map[string]string) (out *pluginpb.CodeGeneratorResponse_File, err error) {
+func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGeneratorResponse_File, err error) {
 	if f.GetSyntax() != "proto3" {
 		err = fmt.Errorf("proto3 is the only syntax supported by protoc-gen-tsjson, found %s in %s", f.GetSyntax(), f.GetName())
 		return
