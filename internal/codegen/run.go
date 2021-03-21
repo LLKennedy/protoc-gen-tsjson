@@ -361,6 +361,10 @@ func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *stri
 }
 
 func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descriptorpb.DescriptorProto, pkgName string, fileExports []string) string {
+	repeatedStr := ""
+	if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+		repeatedStr = "[]"
+	}
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
 		descriptorpb.FieldDescriptorProto_TYPE_FLOAT,
@@ -375,13 +379,13 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 		descriptorpb.FieldDescriptorProto_TYPE_SINT32,
 		descriptorpb.FieldDescriptorProto_TYPE_SINT64:
 		// Javascript only has one number format
-		return "number"
+		return "number" + repeatedStr
 	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
-		return "boolean"
+		return "boolean" + repeatedStr
 	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
-		return "string"
+		return "string" + repeatedStr
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
-		return "Uint8Array"
+		return "Uint8Array" + repeatedStr
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		// TODO: this lookup is not efficient, but it'll do for now. building a map of known types by name as we go would be good
 		for _, nestedMessage := range message.GetNestedType() {
@@ -401,7 +405,7 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 			panic(fmt.Errorf("type name did not match any valid pattern: %s, found %d instead of 3: %s", typeName, len(matches), matches))
 		}
 		pkgSection := fmt.Sprintf("%s__", matches[1])
-		typeSection := strings.ReplaceAll(matches[2], ".", "__")
+		typeSection := strings.ReplaceAll(matches[2], ".", "__") + repeatedStr
 		for _, exp := range fileExports {
 			if exp == typeSection {
 				return typeSection
