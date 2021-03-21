@@ -1,0 +1,13 @@
+syntax = "proto3";
+package tsjson;
+option go_package = "github.com/LLKennedy/protoc-gen-tsjson/tsjsonpb";
+option (npm_package) = "@llkennedy/protoc-gen-tsjson";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+	// Specifies an NPM package to use as an import statement when traversing packages
+	string npm_package = 210320;
+	// Specifies the path from the root of the package to the file
+	string import_path = 210321;
+}

@@ -1,6 +1,10 @@
 syntax = "proto3";
 
-package testroot;
+import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto";
+option (tsjson.npm_package) = "@llkennedy/protoc-gen-tsjson-samples";
+option (tsjson.import_path) = "root2";
+
+package test;
 
 message RootResponse {
 	bool result_of_rpc = 2;

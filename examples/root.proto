@@ -1,5 +1,9 @@
 syntax = "proto3";
 
+import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto";
+option (tsjson.npm_package) = "@llkennedy/protoc-gen-tsjson-samples";
+option (tsjson.import_path) = "root";
+
 import "sampleproto/core/test.proto";
 import "root2.proto";
 import "google/protobuf/timestamp.proto";
@@ -8,7 +12,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
 
-package testroot;
+package test;
 
 // An example service
 service Example {
@@ -34,7 +38,7 @@ enum RootTypes {
 
 // RootMessage is the only message in the top level file, which uses other imported messages to demonstrate linking
 message RootMessage {
-	core.Test test = 1000;
+	Test test = 1000;
 	RootTypes type = 1;
 	message Stuff {
 		int64 a = 1;

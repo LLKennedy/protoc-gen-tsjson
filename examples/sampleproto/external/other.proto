@@ -1,6 +1,10 @@
 syntax = "proto3";
 
-package external;
+import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto";
+option (tsjson.npm_package) = "@llkennedy/protoc-gen-tsjson-samples";
+option (tsjson.import_path) = "sampleproto/external/other";
+
+package test;
 
 message OtherThing {
 	bytes data = 1;

@@ -10,7 +10,7 @@ const (
 	// Major is the major version of the tool
 	Major = 0
 	// Minor is the minor version of the tool
-	Minor = 3
+	Minor = 4
 	// Patch is the patch version of the tool
 	Patch = 0
 )
