@@ -64,18 +64,15 @@ type exportDetails struct {
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
 	var out *pluginpb.CodeGeneratorResponse_File
-	// Map of file names to input paths
-	var exportMap map[string]exportDetails
-	// Map of package names to type names to import details
-	var typeMap map[string]map[string]exportDetails
-	exportMap, typeMap, err = buildImportsAndTypes(request.GetProtoFile())
+	var impexp importsExports
+	impexp, err = buildImportsAndTypes(request.GetProtoFile())
 	if err != nil {
 		return nil, err
 	}
 	for _, file := range request.GetProtoFile() {
 		for _, toGen := range request.GetFileToGenerate() {
 			if file.GetName() == toGen {
-				out, err = generateFullFile(file, exportMap, typeMap)
+				out, err = generateFullFile(file, impexp)
 				if err != nil {
 					return
 				}
@@ -87,14 +84,23 @@ func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*plugi
 	return
 }
 
-func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (exportMap map[string]exportDetails, typeMap map[string]map[string]exportDetails, err error) {
+type importsExports struct {
+	exportMap   map[string]exportDetails
+	typeMap     map[string]map[string]exportDetails
+	fileTypeMap map[string][]string
+}
+
+func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (impexp importsExports, err error) {
 	// Map of file names to input paths
-	exportMap = make(map[string]exportDetails, len(files))
+	impexp.exportMap = make(map[string]exportDetails, len(files))
 	// Map of package names to type names to import details
-	typeMap = make(map[string]map[string]exportDetails, len(files)) // Length here is just a starting value, not expected to be accurate
+	impexp.typeMap = make(map[string]map[string]exportDetails, len(files)) // Length here is just a starting value, not expected to be accurate
+	// Map of file names to type names
+	impexp.fileTypeMap = make(map[string][]string, len(files))
 	// Map of
 	// Check all files except google ones have both npm_package and import_path options set
 	for _, file := range files {
+		fileName := file.GetName()
 		pkgName := file.GetPackage()
 		if len(pkgName) >= len(googlePrefix) && pkgName[:len(googlePrefix)] == googlePrefix {
 			// Google files are allowed to not have the options, we handle them differently
@@ -102,7 +108,7 @@ func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (exportMap 
 		}
 		npmPackage, ok := proto.GetExtension(file.GetOptions(), tsjsonpb.E_NpmPackage).(string)
 		if !ok || npmPackage == "" {
-			return nil, nil, fmt.Errorf("all imported files must specify the option (tsjson.npm_package), file %s did not", file.GetName())
+			err = fmt.Errorf("all imported files must specify the option (tsjson.npm_package), file %s did not", fileName)
 		}
 		importPath, _ := proto.GetExtension(file.GetOptions(), tsjsonpb.E_ImportPath).(string)
 		pkg := file.GetPackage()
@@ -111,27 +117,30 @@ func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (exportMap 
 			importPath:   importPath,
 			protoPackage: pkg,
 		}
-		exportMap[file.GetName()] = details
-		pkgTypes, ok := typeMap[pkg]
+		impexp.exportMap[fileName] = details
+		pkgTypes, ok := impexp.typeMap[pkg]
 		if !ok {
 			pkgTypes = make(map[string]exportDetails, len(file.GetEnumType())+len(file.GetMessageType()))
-			typeMap[pkg] = pkgTypes
+			impexp.typeMap[pkg] = pkgTypes
 		}
 		// Map out type defintions to packages for lookup later
 		for _, enum := range file.GetEnumType() {
 			parsedName := strings.ReplaceAll(enum.GetName(), ".", "__")
 			pkgTypes[parsedName] = details
+			impexp.fileTypeMap[fileName] = append(impexp.fileTypeMap[fileName], parsedName)
 		}
 		for _, msg := range file.GetMessageType() {
 			parsedName := strings.ReplaceAll(msg.GetName(), ".", "__")
 			pkgTypes[parsedName] = details
+			impexp.fileTypeMap[fileName] = append(impexp.fileTypeMap[fileName], parsedName)
 			for _, innerMsg := range msg.GetNestedType() {
 				innerName := fmt.Sprintf("%s__%s", parsedName, strings.ReplaceAll(innerMsg.GetName(), ".", "__"))
 				pkgTypes[innerName] = details
+				impexp.fileTypeMap[fileName] = append(impexp.fileTypeMap[fileName], innerName)
 			}
 		}
 	}
-	return exportMap, typeMap, nil
+	return impexp, nil
 }
 
 func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.CodeGeneratorResponse_File, pkgMap map[string]string, err error) {
@@ -177,23 +186,30 @@ func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.C
 	return
 }
 
-func generateFullFile(f *descriptorpb.FileDescriptorProto, exportMap map[string]exportDetails, typeMap map[string]map[string]exportDetails) (out *pluginpb.CodeGeneratorResponse_File, err error) {
+func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports) (out *pluginpb.CodeGeneratorResponse_File, err error) {
+	fileName := f.GetName()
 	if f.GetSyntax() != "proto3" {
-		err = fmt.Errorf("proto3 is the only syntax supported by protoc-gen-tsjson, found %s in %s", f.GetSyntax(), f.GetName())
+		err = fmt.Errorf("proto3 is the only syntax supported by protoc-gen-tsjson, found %s in %s", f.GetSyntax(), fileName)
 		return
 	}
-	parsedName := filenameFromProto(f.GetName())
+	parsedName := filenameFromProto(fileName)
+	details, _ := impexp.exportMap[fileName]
+	outName := details.importPath
+	if outName == "" {
+		outName = parsedName.fullWithoutExtension
+	}
 	out = &pluginpb.CodeGeneratorResponse_File{
-		Name: proto.String(parsedName.fullWithoutExtension + ".ts"),
+		Name: proto.String(outName + ".ts"),
 	}
 	content := &strings.Builder{}
-	content.WriteString(getCodeGenmarker(version.GetVersionString(), protocVersion, f.GetName()))
+	content.WriteString(getCodeGenmarker(version.GetVersionString(), protocVersion, fileName))
 	// Imports
-	generateImports(f, content, typeMap)
+	generateImports(f, content, impexp)
 	// Enums
 	generateEnums(f.GetEnumType(), content)
 	// Messages
-	generateMessages(f.GetMessageType(), content, f.GetPackage())
+	exports, _ := impexp.fileTypeMap[fileName]
+	generateMessages(f.GetMessageType(), content, f.GetPackage(), exports)
 	// Services
 	generateServices(f.GetService(), content)
 	// Comments? unclear how to link them back to other elements
@@ -202,10 +218,10 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, exportMap map[string]
 	return
 }
 
-func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, typeMap map[string]map[string]exportDetails) {
+func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, impexp importsExports) {
 	importMap := make(map[string][]string)
 	for _, msg := range f.GetMessageType() {
-		generateImportsForMessage(f, msg, importMap, content, typeMap)
+		generateImportsForMessage(f, msg, importMap, content, impexp)
 	}
 	for importPath, imports := range importMap {
 		fullImportList := &strings.Builder{}
@@ -220,10 +236,11 @@ func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Build
 	content.WriteString("\n")
 }
 
-func generateImportsForMessage(f *descriptorpb.FileDescriptorProto, msg *descriptorpb.DescriptorProto, importMap map[string][]string, content *strings.Builder, typeMap map[string]map[string]exportDetails) {
+func generateImportsForMessage(f *descriptorpb.FileDescriptorProto, msg *descriptorpb.DescriptorProto, importMap map[string][]string, content *strings.Builder, impexp importsExports) {
+	fileName := f.GetName()
 	for _, innerMsg := range msg.GetNestedType() {
 		// Recurse
-		generateImportsForMessage(f, innerMsg, importMap, content, typeMap)
+		generateImportsForMessage(f, innerMsg, importMap, content, impexp)
 	}
 FIELD_IMPORT_LOOP:
 	for _, field := range msg.GetField() {
@@ -238,9 +255,10 @@ FIELD_IMPORT_LOOP:
 		var importPath string
 		ownPkg := f.GetPackage()
 		if len(pkgName) >= len(ownPkg) && pkgName[:len(ownPkg)] == ownPkg {
-			pkg, ok := typeMap[ownPkg]
+			pkgName = ownPkg
+			pkg, ok := impexp.typeMap[ownPkg]
 			if !ok {
-				panic(fmt.Sprintf("failed to find own package %s in imports for file %s", ownPkg, f.GetName()))
+				panic(fmt.Sprintf("failed to find own package %s in imports for file %s", ownPkg, fileName))
 			}
 			trueName = typeName[len(ownPkg)+1:]
 			parsedName := strings.ReplaceAll(trueName, ".", "__")
@@ -257,7 +275,7 @@ FIELD_IMPORT_LOOP:
 			}
 			details, ok := pkg[parsedName]
 			if !ok {
-				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, f.GetName()))
+				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, fileName))
 			}
 			importPath = details.importPath
 		} else if pkgName == "google.protobuf" {
@@ -265,18 +283,24 @@ FIELD_IMPORT_LOOP:
 			continue
 		} else {
 			log.Println(pkgName + " vs " + ownPkg)
-			pkg, ok := typeMap[pkgName]
+			pkg, ok := impexp.typeMap[pkgName]
 			if !ok {
-				panic(fmt.Sprintf("failed to find package %s in imports for file %s", pkgName, f.GetName()))
+				panic(fmt.Sprintf("failed to find package %s in imports for file %s", pkgName, fileName))
 			}
 			details, ok := pkg[trueName]
 			if !ok {
-				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, f.GetName()))
+				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, fileName))
 			}
 			importPath = fmt.Sprintf("%s/%s", details.npmPackage, details.importPath)
 		}
 		imports, _ := importMap[importPath]
-		imports = append(imports, trueName)
+		imports = append(imports, fmt.Sprintf("%s as %s__%s", trueName, pkgName, trueName))
+		for _, exp := range impexp.fileTypeMap[fileName] {
+			if exp == trueName {
+				// This is local, skip
+				continue FIELD_IMPORT_LOOP
+			}
+		}
 		importMap[importPath] = imports
 	}
 }
@@ -296,13 +320,13 @@ func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.B
 	}
 }
 
-func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings.Builder, pkgName string) {
+func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings.Builder, pkgName string, fileExports []string) {
 	for _, message := range messages {
 		// TODO: get comment data somehow
 		comment := "A message"
 		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
 		for _, field := range message.GetField() {
-			tsType := getNativeTypeName(field, message, pkgName)
+			tsType := getNativeTypeName(field, message, pkgName, fileExports)
 			// FIXME: detect repeated/oneof?
 			// TODO: get comment data somehow
 			comment = "A field"
@@ -316,7 +340,7 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 				comment = "A message"
 				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s__%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
 				for _, nestedField := range nestedType.GetField() {
-					tsType := getNativeTypeName(nestedField, nestedType, pkgName)
+					tsType := getNativeTypeName(nestedField, nestedType, pkgName, fileExports)
 					// FIXME: detect repeated/oneof?
 					// TODO: get comment data somehow
 					comment = "A field"
@@ -336,7 +360,7 @@ func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *stri
 
 }
 
-func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descriptorpb.DescriptorProto, pkgName string) string {
+func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descriptorpb.DescriptorProto, pkgName string, fileExports []string) string {
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
 		descriptorpb.FieldDescriptorProto_TYPE_FLOAT,
@@ -363,8 +387,8 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 		for _, nestedMessage := range message.GetNestedType() {
 			// FIXME: it is possible for this to misfire at least sometimes, though we'll see if it particularly matters
 			if nestedMessage.GetOptions().GetMapEntry() && strings.Contains(field.GetTypeName(), nestedMessage.GetName()) {
-				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil, pkgName)
-				valType := getNativeTypeName(nestedMessage.GetField()[1], nil, pkgName)
+				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil, pkgName, fileExports)
+				valType := getNativeTypeName(nestedMessage.GetField()[1], nil, pkgName, fileExports)
 				return fmt.Sprintf("Map<%s, %s>", keyType, valType)
 			}
 		}
@@ -376,8 +400,13 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 		if len(matches) != 3 {
 			panic(fmt.Errorf("type name did not match any valid pattern: %s, found %d instead of 3: %s", typeName, len(matches), matches))
 		}
-		pkgSection := fmt.Sprintf("packages.%s.", matches[1])
+		pkgSection := fmt.Sprintf("%s__", matches[1])
 		typeSection := strings.ReplaceAll(matches[2], ".", "__")
+		for _, exp := range fileExports {
+			if exp == typeSection {
+				return typeSection
+			}
+		}
 		return fmt.Sprintf("%s%s", pkgSection, typeSection)
 	default:
 		panic(fmt.Errorf("unknown field type: %s", field))
