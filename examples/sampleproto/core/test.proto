@@ -6,9 +6,9 @@ option (tsjson.import_path) = "sampleproto/core/test";
 
 import "sampleproto/external/other.proto";
 
-package core;
+package test;
 
 message Test {
 	int32 id = 1;
-	external.OtherThing thing = 2;
+	OtherThing thing = 2;
 }

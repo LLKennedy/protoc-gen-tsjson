@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
@@ -54,36 +55,27 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 
 const googlePrefix = "google."
 
-type importDetails struct {
-	npmPackage string
-	importPath string
+type exportDetails struct {
+	npmPackage   string
+	importPath   string
+	protoPackage string
 }
 
 // Naive approach to codegen, creates output files for every message/service in every linked file, not just the parts depended on by the "to generate" files
 func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*pluginpb.CodeGeneratorResponse_File, err error) {
 	var out *pluginpb.CodeGeneratorResponse_File
-	// Check all files except google ones have both npm_package and import_path options set
-	importMap := map[string]importDetails{}
-	for _, file := range request.GetProtoFile() {
-		pkgName := file.GetPackage()
-		if len(pkgName) >= len(googlePrefix) && pkgName[:len(googlePrefix)] == googlePrefix {
-			// Google files are allowed to not have the options, we handle them differently
-			continue
-		}
-		npmPackage, ok := proto.GetExtension(file.GetOptions(), tsjsonpb.E_NpmPackage).(string)
-		if !ok || npmPackage == "" {
-			return nil, fmt.Errorf("all imported files must specify the option (tsjson.npm_package), file %s did not", file.GetName())
-		}
-		importPath, _ := proto.GetExtension(file.GetOptions(), tsjsonpb.E_ImportPath).(string)
-		importMap[file.GetName()] = importDetails{
-			npmPackage: npmPackage,
-			importPath: importPath,
-		}
+	// Map of file names to input paths
+	var exportMap map[string]exportDetails
+	// Map of package names to type names to import details
+	var typeMap map[string]map[string]exportDetails
+	exportMap, typeMap, err = buildImportsAndTypes(request.GetProtoFile())
+	if err != nil {
+		return nil, err
 	}
 	for _, file := range request.GetProtoFile() {
 		for _, toGen := range request.GetFileToGenerate() {
 			if file.GetName() == toGen {
-				out, err = generateFullFile(file)
+				out, err = generateFullFile(file, exportMap, typeMap)
 				if err != nil {
 					return
 				}
@@ -93,6 +85,53 @@ func generateAllFiles(request *pluginpb.CodeGeneratorRequest) (outfiles []*plugi
 		}
 	}
 	return
+}
+
+func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (exportMap map[string]exportDetails, typeMap map[string]map[string]exportDetails, err error) {
+	// Map of file names to input paths
+	exportMap = make(map[string]exportDetails, len(files))
+	// Map of package names to type names to import details
+	typeMap = make(map[string]map[string]exportDetails, len(files)) // Length here is just a starting value, not expected to be accurate
+	// Map of
+	// Check all files except google ones have both npm_package and import_path options set
+	for _, file := range files {
+		pkgName := file.GetPackage()
+		if len(pkgName) >= len(googlePrefix) && pkgName[:len(googlePrefix)] == googlePrefix {
+			// Google files are allowed to not have the options, we handle them differently
+			continue
+		}
+		npmPackage, ok := proto.GetExtension(file.GetOptions(), tsjsonpb.E_NpmPackage).(string)
+		if !ok || npmPackage == "" {
+			return nil, nil, fmt.Errorf("all imported files must specify the option (tsjson.npm_package), file %s did not", file.GetName())
+		}
+		importPath, _ := proto.GetExtension(file.GetOptions(), tsjsonpb.E_ImportPath).(string)
+		pkg := file.GetPackage()
+		details := exportDetails{
+			npmPackage:   npmPackage,
+			importPath:   importPath,
+			protoPackage: pkg,
+		}
+		exportMap[file.GetName()] = details
+		pkgTypes, ok := typeMap[pkg]
+		if !ok {
+			pkgTypes = make(map[string]exportDetails, len(file.GetEnumType())+len(file.GetMessageType()))
+			typeMap[pkg] = pkgTypes
+		}
+		// Map out type defintions to packages for lookup later
+		for _, enum := range file.GetEnumType() {
+			parsedName := strings.ReplaceAll(enum.GetName(), ".", "__")
+			pkgTypes[parsedName] = details
+		}
+		for _, msg := range file.GetMessageType() {
+			parsedName := strings.ReplaceAll(msg.GetName(), ".", "__")
+			pkgTypes[parsedName] = details
+			for _, innerMsg := range msg.GetNestedType() {
+				innerName := fmt.Sprintf("%s__%s", parsedName, strings.ReplaceAll(innerMsg.GetName(), ".", "__"))
+				pkgTypes[innerName] = details
+			}
+		}
+	}
+	return exportMap, typeMap, nil
 }
 
 func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.CodeGeneratorResponse_File, pkgMap map[string]string, err error) {
@@ -138,7 +177,7 @@ func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.C
 	return
 }
 
-func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGeneratorResponse_File, err error) {
+func generateFullFile(f *descriptorpb.FileDescriptorProto, exportMap map[string]exportDetails, typeMap map[string]map[string]exportDetails) (out *pluginpb.CodeGeneratorResponse_File, err error) {
 	if f.GetSyntax() != "proto3" {
 		err = fmt.Errorf("proto3 is the only syntax supported by protoc-gen-tsjson, found %s in %s", f.GetSyntax(), f.GetName())
 		return
@@ -150,7 +189,7 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGe
 	content := &strings.Builder{}
 	content.WriteString(getCodeGenmarker(version.GetVersionString(), protocVersion, f.GetName()))
 	// Imports
-	content.WriteString("import * as packages from \"__packages__\";\n\n")
+	generateImports(f, content, typeMap)
 	// Enums
 	generateEnums(f.GetEnumType(), content)
 	// Messages
@@ -161,6 +200,85 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto) (out *pluginpb.CodeGe
 	generateComments(f.GetSourceCodeInfo(), content)
 	out.Content = proto.String(content.String())
 	return
+}
+
+func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, typeMap map[string]map[string]exportDetails) {
+	importMap := make(map[string][]string)
+	for _, msg := range f.GetMessageType() {
+		generateImportsForMessage(f, msg, importMap, content, typeMap)
+	}
+	for importPath, imports := range importMap {
+		fullImportList := &strings.Builder{}
+		for i, imp := range imports {
+			if i != 0 {
+				fullImportList.WriteString(", ")
+			}
+			fullImportList.WriteString(imp)
+		}
+		content.WriteString(fmt.Sprintf("import { %s } from \"%s\";\n", fullImportList.String(), importPath))
+	}
+	content.WriteString("\n")
+}
+
+func generateImportsForMessage(f *descriptorpb.FileDescriptorProto, msg *descriptorpb.DescriptorProto, importMap map[string][]string, content *strings.Builder, typeMap map[string]map[string]exportDetails) {
+	for _, innerMsg := range msg.GetNestedType() {
+		// Recurse
+		generateImportsForMessage(f, innerMsg, importMap, content, typeMap)
+	}
+FIELD_IMPORT_LOOP:
+	for _, field := range msg.GetField() {
+		typeName := field.GetTypeName()
+		if typeName == "" {
+			continue
+		}
+		typeName = strings.TrimLeft(typeName, ".")
+		typeNameParts := strings.Split(typeName, ".")
+		trueName := typeNameParts[len(typeNameParts)-1]
+		pkgName := strings.TrimSuffix(typeName, "."+trueName)
+		var importPath string
+		ownPkg := f.GetPackage()
+		if len(pkgName) >= len(ownPkg) && pkgName[:len(ownPkg)] == ownPkg {
+			pkg, ok := typeMap[ownPkg]
+			if !ok {
+				panic(fmt.Sprintf("failed to find own package %s in imports for file %s", ownPkg, f.GetName()))
+			}
+			trueName = typeName[len(ownPkg)+1:]
+			parsedName := strings.ReplaceAll(trueName, ".", "__")
+			// Exclude local messages/enums from import
+			for _, msg2 := range f.GetMessageType() {
+				if msg2.GetName() == trueName {
+					continue FIELD_IMPORT_LOOP
+				}
+				for _, innerMsg := range msg2.GetNestedType() {
+					if msg2.GetName()+"."+innerMsg.GetName() == trueName {
+						continue FIELD_IMPORT_LOOP
+					}
+				}
+			}
+			details, ok := pkg[parsedName]
+			if !ok {
+				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, f.GetName()))
+			}
+			importPath = details.importPath
+		} else if pkgName == "google.protobuf" {
+			// FIXME: import pre-defined google types from @llkennedy/tsjson here
+			continue
+		} else {
+			log.Println(pkgName + " vs " + ownPkg)
+			pkg, ok := typeMap[pkgName]
+			if !ok {
+				panic(fmt.Sprintf("failed to find package %s in imports for file %s", pkgName, f.GetName()))
+			}
+			details, ok := pkg[trueName]
+			if !ok {
+				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, f.GetName()))
+			}
+			importPath = fmt.Sprintf("%s/%s", details.npmPackage, details.importPath)
+		}
+		imports, _ := importMap[importPath]
+		imports = append(imports, trueName)
+		importMap[importPath] = imports
+	}
 }
 
 func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.Builder) {
