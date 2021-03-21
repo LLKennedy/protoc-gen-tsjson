@@ -60,6 +60,7 @@
 		"forceConsistentCasingInFileNames": true /* Disallow inconsistently-cased references to the same file. */
 	},
 	"include": [
-		"google.ts"
+		"index.ts",
+		"./google/**/*.ts"
 	]
 }
