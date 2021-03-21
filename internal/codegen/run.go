@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -54,6 +53,7 @@ func Run(request *pluginpb.CodeGeneratorRequest) (response *pluginpb.CodeGenerat
 }
 
 const googlePrefix = "google."
+const googleProtobufPrefix = "google.protobuf"
 
 type exportDetails struct {
 	npmPackage   string
@@ -143,49 +143,6 @@ func buildImportsAndTypes(files []*descriptorpb.FileDescriptorProto) (impexp imp
 	return impexp, nil
 }
 
-func generatePackages(request *pluginpb.CodeGeneratorRequest) (out []*pluginpb.CodeGeneratorResponse_File, pkgMap map[string]string, err error) {
-	pkgMap = make(map[string]string)
-	packageNames := map[string][]string{}
-	for _, file := range request.GetProtoFile() {
-		if file.GetSyntax() != "proto3" {
-			err = fmt.Errorf("proto3 is the only syntax supported by protoc-gen-tsjson, found %s in %s", file.GetSyntax(), file.GetName())
-			return
-		}
-		pkgName := file.GetPackage()
-		if pkgName == "" {
-			err = fmt.Errorf("packages are mandatory with protoc-gen-tsjson, %s did not have a package", file.GetName())
-			return
-		}
-		if pkgName == "index" {
-			err = fmt.Errorf("for JS/TS language reasons, \"index\" is an invalid package name")
-		}
-		pkgMap[file.GetName()] = pkgName
-		list, _ := packageNames[pkgName]
-		list = append(list, file.GetName())
-		packageNames[pkgName] = list
-	}
-	indexFile := &pluginpb.CodeGeneratorResponse_File{
-		Name: proto.String("__packages__/index.ts"),
-	}
-	indexContent := &strings.Builder{}
-	for pkgName, importList := range packageNames {
-		outFile := &pluginpb.CodeGeneratorResponse_File{
-			Name: proto.String(fmt.Sprintf("__packages__/%s.ts", pkgName)),
-		}
-		content := &strings.Builder{}
-		for _, importFile := range importList {
-			parsedName := filenameFromProto(importFile)
-			content.WriteString(fmt.Sprintf("export * from \"%s\";\n", parsedName.fullWithoutExtension))
-		}
-		outFile.Content = proto.String(content.String())
-		out = append(out, outFile)
-		indexContent.WriteString(fmt.Sprintf("export * as %s from \"__packages__/%s\";\n", pkgName, pkgName))
-	}
-	indexFile.Content = proto.String(indexContent.String())
-	out = append(out, indexFile)
-	return
-}
-
 func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports) (out *pluginpb.CodeGeneratorResponse_File, err error) {
 	fileName := f.GetName()
 	if f.GetSyntax() != "proto3" {
@@ -220,8 +177,12 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports
 
 func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, impexp importsExports) {
 	importMap := make(map[string][]string)
+	useGoogle := false
 	for _, msg := range f.GetMessageType() {
-		generateImportsForMessage(f, msg, importMap, content, impexp)
+		useGoogle = useGoogle || generateImportsForMessage(f, msg, importMap, content, impexp)
+	}
+	if useGoogle {
+		content.WriteString("import { google } from \"@llkennedy/protoc-gen-tsjson\";\n")
 	}
 	for importPath, imports := range importMap {
 		fullImportList := &strings.Builder{}
@@ -236,7 +197,7 @@ func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Build
 	content.WriteString("\n")
 }
 
-func generateImportsForMessage(f *descriptorpb.FileDescriptorProto, msg *descriptorpb.DescriptorProto, importMap map[string][]string, content *strings.Builder, impexp importsExports) {
+func generateImportsForMessage(f *descriptorpb.FileDescriptorProto, msg *descriptorpb.DescriptorProto, importMap map[string][]string, content *strings.Builder, impexp importsExports) (useGoogle bool) {
 	fileName := f.GetName()
 	for _, innerMsg := range msg.GetNestedType() {
 		// Recurse
@@ -278,11 +239,10 @@ FIELD_IMPORT_LOOP:
 				panic(fmt.Sprintf("failed to find type %s in exports for package %s in file %s", trueName, pkgName, fileName))
 			}
 			importPath = details.importPath
-		} else if pkgName == "google.protobuf" {
-			// FIXME: import pre-defined google types from @llkennedy/tsjson here
+		} else if pkgName == googleProtobufPrefix {
+			useGoogle = true
 			continue
 		} else {
-			log.Println(pkgName + " vs " + ownPkg)
 			pkg, ok := impexp.typeMap[pkgName]
 			if !ok {
 				panic(fmt.Sprintf("failed to find package %s in imports for file %s", pkgName, fileName))
@@ -303,6 +263,7 @@ FIELD_IMPORT_LOOP:
 		}
 		importMap[importPath] = imports
 	}
+	return
 }
 
 func generateEnums(enums []*descriptorpb.EnumDescriptorProto, content *strings.Builder) {
@@ -326,6 +287,9 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 		comment := "A message"
 		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
 		for _, field := range message.GetField() {
+			if field.GetTypeName() == ".google.protobuf.NullValue" {
+				continue
+			}
 			tsType := getNativeTypeName(field, message, pkgName, fileExports)
 			// FIXME: detect repeated/oneof?
 			// TODO: get comment data somehow
@@ -340,6 +304,9 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 				comment = "A message"
 				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s__%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
 				for _, nestedField := range nestedType.GetField() {
+					if nestedField.GetTypeName() == ".google.protobuf.NullValue" {
+						continue
+					}
 					tsType := getNativeTypeName(nestedField, nestedType, pkgName, fileExports)
 					// FIXME: detect repeated/oneof?
 					// TODO: get comment data somehow
@@ -396,7 +363,12 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 				return fmt.Sprintf("Map<%s, %s>", keyType, valType)
 			}
 		}
-		// Not a map
+		fieldTypeName := strings.TrimLeft(field.GetTypeName(), ".")
+		if len(fieldTypeName) >= len(googleProtobufPrefix) && fieldTypeName[:len(googleProtobufPrefix)] == googleProtobufPrefix {
+			// This is a google well-known type
+			return fieldTypeName
+		}
+		// Not a map, not a google type
 		fallthrough
 	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
 		typeName := field.GetTypeName()

@@ -22,10 +22,6 @@ export class Value {
 
 }
 
-export class NullValue {
-
-}
-
 export class Empty {
 
 }
