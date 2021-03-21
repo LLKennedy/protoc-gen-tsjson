@@ -1,12 +1,12 @@
 {
   "name": "@llkennedy/protoc-gen-tsjson",
-  "version": "0.4.0-pre3",
+  "version": "0.4.0-pre4",
   "description": "Typescript bindings for canonical JSON representation of gRPC messages.",
   "scripts": {
     "build": "rimraf ./lib && tsc",
     "prepublishOnly": "npm run build"
   },
-  "main": "lib/index.ts",
+  "main": "lib/google.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LLKennedy/protoc-gen-tsjson.git"
