@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto";
 option (tsjson.npm_package) = "@llkennedy/protoc-gen-tsjson-samples";
 option (tsjson.import_path) = "root";
 
@@ -10,7 +11,6 @@ import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
-import "node_modules/@llkennedy/protoc-gen-tsjson/tsjson.proto"; // --proto_path=./node_modules/@llkennedy/protoc-gen-tsjson/
 
 package testroot;
 

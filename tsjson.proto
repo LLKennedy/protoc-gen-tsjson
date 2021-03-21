@@ -1,5 +1,6 @@
 syntax = "proto3";
 package tsjson;
+option go_package = "github.com/LLKennedy/protoc-gen-tsjson/tsjsonpb";
 option (npm_package) = "@llkennedy/protoc-gen-tsjson";
 
 import "google/protobuf/descriptor.proto";
