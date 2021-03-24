@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
@@ -254,7 +255,15 @@ FIELD_IMPORT_LOOP:
 			importPath = fmt.Sprintf("%s/%s", details.npmPackage, details.importPath)
 		}
 		imports, _ := importMap[importPath]
-		imports = append(imports, fmt.Sprintf("%s as %s__%s", trueName, pkgName, trueName))
+		uniqueImports := map[string]struct{}{}
+		for _, anImport := range imports {
+			uniqueImports[anImport] = struct{}{}
+		}
+		uniqueImports[fmt.Sprintf("%s as %s__%s", trueName, pkgName, trueName)] = struct{}{}
+		imports = []string{}
+		for anImport := range uniqueImports {
+			imports = append(imports, anImport)
+		}
 		for _, exp := range impexp.fileTypeMap[fileName] {
 			if exp == trueName {
 				// This is local, skip
@@ -285,6 +294,9 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 	for _, message := range messages {
 		// TODO: get comment data somehow
 		comment := "A message"
+		for _, oneof := range message.GetOneofDecl() {
+			log.Println(oneof.GetName())
+		}
 		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
 		for _, field := range message.GetField() {
 			if field.GetTypeName() == ".google.protobuf.NullValue" {
