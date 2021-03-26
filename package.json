@@ -1,6 +1,6 @@
 {
   "name": "@llkennedy/protoc-gen-tsjson",
-  "version": "0.4.0",
+  "version": "0.5.0-pre1",
   "description": "Typescript bindings for canonical JSON representation of gRPC messages.",
   "scripts": {
     "build": "rimraf ./lib && tsc",
