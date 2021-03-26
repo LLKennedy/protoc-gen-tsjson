@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -177,6 +176,10 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports
 }
 
 func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, impexp importsExports) {
+	if len(f.GetMessageType()) > 0 {
+		// All messages need the common imports
+		content.WriteString("import { ProtoJSONCompatible, Parser } from \"@llkennedy/protoc-gen-tsjson\";\n")
+	}
 	importMap := make(map[string][]string)
 	useGoogle := false
 	for _, msg := range f.GetMessageType() {
@@ -294,41 +297,93 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 	for _, message := range messages {
 		// TODO: get comment data somehow
 		comment := "A message"
-		for _, oneof := range message.GetOneofDecl() {
-			log.Println(oneof.GetName())
-		}
-		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
-		for _, field := range message.GetField() {
-			if field.GetTypeName() == ".google.protobuf.NullValue" {
-				continue
-			}
-			tsType := getNativeTypeName(field, message, pkgName, fileExports)
-			// FIXME: detect repeated/oneof?
-			// TODO: get comment data somehow
-			comment = "A field"
-			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
-		}
-		content.WriteString("}\n\n")
-
+		generateMessage(message, comment, message.GetName(), pkgName, content, fileExports)
 		for _, nestedType := range message.GetNestedType() {
 			if !nestedType.GetOptions().GetMapEntry() {
 				// TODO: get comment data somehow
 				comment = "A message"
-				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s__%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
-				for _, nestedField := range nestedType.GetField() {
-					if nestedField.GetTypeName() == ".google.protobuf.NullValue" {
-						continue
-					}
-					tsType := getNativeTypeName(nestedField, nestedType, pkgName, fileExports)
-					// FIXME: detect repeated/oneof?
-					// TODO: get comment data somehow
-					comment = "A field"
-					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetJsonName(), tsType))
-				}
-				content.WriteString("}\n\n")
+				name := fmt.Sprintf("%s__%s", message.GetName(), nestedType.GetName())
+				generateMessage(nestedType, comment, name, pkgName, content, fileExports)
 			}
 		}
 	}
+}
+
+func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName string, content *strings.Builder, fileExports []string) {
+	content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object implements ProtoJSONCompatible {\n", comment, name))
+	for _, field := range msg.GetField() {
+		if field.GetTypeName() == ".google.protobuf.NullValue" {
+			continue
+		}
+		tsType := getNativeTypeName(field, msg, pkgName, fileExports)
+		// FIXME: detect repeated/oneof?
+		// TODO: get comment data somehow
+		comment = "A field"
+		content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
+	}
+	protoJSONContent := &strings.Builder{}
+	protoJSONContent.WriteString(`		return {
+`)
+	for _, field := range msg.GetField() {
+		// FIXME: detect repeated/oneof
+		switch field.GetType() {
+		case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+			protoJSONContent.WriteString(fmt.Sprintf(`			%s: mercury.ToProtoJSON.Bool(this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+			protoJSONContent.WriteString(fmt.Sprintf(`			%s: mercury.ToProtoJSON.Bytes(this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+			protoJSONContent.WriteString(fmt.Sprintf(`			%s: mercury.ToProtoJSON.Number(this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_FIXED64, descriptorpb.FieldDescriptorProto_TYPE_SFIXED64, descriptorpb.FieldDescriptorProto_TYPE_UINT64, descriptorpb.FieldDescriptorProto_TYPE_SINT64, descriptorpb.FieldDescriptorProto_TYPE_INT64:
+			protoJSONContent.WriteString(fmt.Sprintf(`			%s: mercury.ToProtoJSON.StringNumber(this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+			protoJSONContent.WriteString(fmt.Sprintf(`			%s: mercury.ToProtoJSON.String(this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+			// TODO
+		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+			// TODO
+		}
+	}
+	protoJSONContent.WriteString(`		};`)
+	parseContent := &strings.Builder{}
+	parseContent.WriteString(fmt.Sprintf(`		let objData: Object = mercury.AnyToObject(data);
+		let res = new %s();
+`, name))
+	for _, field := range msg.GetField() {
+		// FIXME: detect repeated/oneof
+		switch field.GetType() {
+		case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+			parseContent.WriteString(fmt.Sprintf(`		res.%s = await mercury.Parse.Bool(objData, "%s", "%s");
+`, field.GetJsonName(), field.GetJsonName(), field.GetName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+			parseContent.WriteString(fmt.Sprintf(`		res.%s = await mercury.Parse.Bytes(objData, "%s", "%s");
+`, field.GetJsonName(), field.GetJsonName(), field.GetName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_FIXED64, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_INT64, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED64, descriptorpb.FieldDescriptorProto_TYPE_SINT32, descriptorpb.FieldDescriptorProto_TYPE_SINT64, descriptorpb.FieldDescriptorProto_TYPE_UINT32, descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+			parseContent.WriteString(fmt.Sprintf(`		res.%s = await mercury.Parse.Number(objData, "%s", "%s");
+`, field.GetJsonName(), field.GetJsonName(), field.GetName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+			parseContent.WriteString(fmt.Sprintf(`		res.%s = await mercury.Parse.String(objData, "%s", "%s");
+`, field.GetJsonName(), field.GetJsonName(), field.GetName()))
+		case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+			// TODO
+		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+			// TODO
+		}
+	}
+	parseContent.WriteString(`		return res;`)
+
+	content.WriteString(fmt.Sprintf(`	public ToProtoJSON(): Object {
+%s
+	}
+	public static async Parse(data: any): Promise<%s> {
+%s
+	}
+`, protoJSONContent.String(), name, parseContent.String()))
+	content.WriteString("}\n\n")
 }
 
 func generateServices(services []*descriptorpb.ServiceDescriptorProto, content *strings.Builder) {
