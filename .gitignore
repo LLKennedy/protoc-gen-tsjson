@@ -21,7 +21,4 @@
 *.js
 *.map
 
-!exports/src/**
-!index.ts
-!common/**
-!google/**
+!src/**
