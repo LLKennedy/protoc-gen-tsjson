@@ -1,5 +1,3 @@
-import { EnumType } from "typescript";
-import { EnumMap } from "./Enums";
 import { base64 } from "rfc4648"
 import { google } from "..";
 import { ProtoJSONCompatible } from "./ProtoJSONCompatible";
@@ -52,7 +50,7 @@ export class ToProtoJSON {
 		return req?.ToProtoJSON()
 	}
 	/** Write an enum which could be either strings or numbers. This is NOT fully type safe, if EnumMap is not the Object.keys of the actual enum T, bad things will happen */
-	public static Enum<T extends EnumMap>(map: T, val?: number): string | undefined {
+	public static Enum<T>(map: T, val?: number): string | undefined {
 		if (val === undefined) {
 			return undefined;
 		}
@@ -167,8 +165,8 @@ export class Parse {
 	public static async Message<T>(obj: Object, prop: string, altProp: string, parser: Parser<T>): Promise<T | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, PrimitiveParse.Message<T>(parser), ["object"]);
 	}
-	/** Parse an enum which could be either strings or numbers. This is NOT fully type safe, if EnumMap is not the Object.keys of the actual enum T, bad things will happen */
-	public static async Enum<T extends EnumType>(obj: Object, prop: string, altProp: string, map: EnumMap): Promise<T | undefined> {
+	/** Parse an enum which could be either strings or numbers. This is NOT fully type safe, if map is not the Object.keys of the actual enum T, bad things will happen */
+	public static async Enum<T>(obj: Object, prop: string, altProp: string, map: T): Promise<T | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, PrimitiveParse.Enum<T>(map), ["string", "number"]);
 	}
 	/** Parse a map, providing individual parsers for key and value instances */
@@ -247,7 +245,7 @@ export class PrimitiveParse {
 			return parser(raw);
 		}
 	}
-	public static Enum<T extends EnumType>(map: EnumMap): Parser<T> {
+	public static Enum<T>(map: T): Parser<T> {
 		return async raw => {
 			if (typeof raw === "string" && raw === "") {
 				// Empty string is the zero value
