@@ -166,7 +166,7 @@ export class Parse {
 		return ParseIfNotNull(obj, prop, altProp, PrimitiveParse.Message<T>(parser), ["object"]);
 	}
 	/** Parse an enum which could be either strings or numbers. This is NOT fully type safe, if map is not the Object.keys of the actual enum T, bad things will happen */
-	public static async Enum<T>(obj: Object, prop: string, altProp: string, map: T): Promise<T | undefined> {
+	public static async Enum<T>(obj: Object, prop: string, altProp: string, map: T): Promise<any | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, PrimitiveParse.Enum<T>(map), ["string", "number"]);
 	}
 	/** Parse a map, providing individual parsers for key and value instances */
@@ -245,7 +245,7 @@ export class PrimitiveParse {
 			return parser(raw);
 		}
 	}
-	public static Enum<T>(map: T): Parser<T> {
+	public static Enum<T>(map: T): Parser<any> {
 		return async raw => {
 			if (typeof raw === "string" && raw === "") {
 				// Empty string is the zero value
