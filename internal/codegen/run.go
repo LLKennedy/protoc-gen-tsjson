@@ -412,6 +412,7 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 			_, isMap := mapTypes[field.GetTypeName()]
 			switch {
 			case isMap:
+				// TODO: parsers and marshallers for all the different map keys and values, basically nesting this entire switch/case again
 				protoJSONContent.WriteString(fmt.Sprintf(`			%s: tsjson.ToProtoJSON.Map(TODO, this.%s),
 `, field.GetJsonName(), field.GetJsonName()))
 				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Map(objData, "%s", "%s", TODO);

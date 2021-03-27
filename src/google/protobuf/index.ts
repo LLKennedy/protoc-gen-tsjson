@@ -11,8 +11,8 @@ export class Any {
 	public ToProtoJSON(): any {
 		return this.value;
 	}
-	public static async Parse(data: any): Promise<any> {
-		return data;
+	public static async Parse(data: any): Promise<Any> {
+		return new Any(data);
 	}
 }
 
@@ -24,17 +24,17 @@ export class Timestamp {
 	public ToProtoJSON(): string | undefined {
 		return this.timestamp?.toISOString()
 	}
-	public static async Parse(data: any): Promise<Date> {
+	public static async Parse(data: any): Promise<Timestamp> {
 		switch (typeof data) {
 			case "object":
 				if (!(data instanceof Date)) {
 					// TODO: handle marshalling of datetime struct
 					throw new Error("Non-date objects not supported for date parsing");
 				}
-				return data;
+				return new Timestamp(data);
 			case "string":
 			case "number":
-				return new Date(data);
+				return new Timestamp(new Date(data));
 			default:
 				throw new Error("date can only be marshalled from string or number")
 		}
@@ -49,7 +49,7 @@ export class Duration {
 	public ToProtoJSON(): string {
 		return (this.durationSeconds?.toFixed(9) ?? "0") + "s";
 	}
-	public static async Parse(data: any): Promise<number> {
+	public static async Parse(data: any): Promise<Duration> {
 		if (typeof data !== "string") {
 			throw new Error("duration must be a string");
 		}
@@ -60,7 +60,7 @@ export class Duration {
 			throw new Error("duration must only contain one s")
 		}
 		data = data.replace("s", "");
-		return Number(data);
+		return new Duration(Number(data));
 	}
 }
 
@@ -72,12 +72,12 @@ export class Struct {
 	public ToProtoJSON(): Object | undefined {
 		return this.data;
 	}
-	public static async Parse(data: any): Promise<Object> {
+	public static async Parse(data: any): Promise<Struct> {
 		switch (typeof data) {
 			case "object":
-				return data;
+				return new Struct(data);
 			case "string":
-				return JSON.parse(data);
+				return new Struct(JSON.parse(data));
 			default:
 				throw new Error("unimplemented");
 		}
@@ -88,7 +88,7 @@ export class Wrapper {
 	public ToProtoJSON(): any {
 		throw new Error("unimplemented");
 	}
-	public static async Parse(_: any): Promise<any> {
+	public static async Parse(_: any): Promise<Wrapper> {
 		throw new Error("unimplemented");
 	}
 }
@@ -97,7 +97,7 @@ export class FieldMask {
 	public ToProtoJSON(): any {
 		throw new Error("unimplemented");
 	}
-	public static async Parse(_: any): Promise<any> {
+	public static async Parse(_: any): Promise<FieldMask> {
 		throw new Error("unimplemented");
 	}
 }
@@ -110,7 +110,7 @@ export class ListValue {
 	public ToProtoJSON(): any {
 		throw new Error("unimplemented");
 	}
-	public static async Parse(_: any): Promise<any[]> {
+	public static async Parse(_: any): Promise<ListValue> {
 		throw new Error("unimplemented");
 	}
 }
@@ -123,7 +123,7 @@ export class Value {
 	public ToProtoJSON(): any {
 		return this.value;
 	}
-	public static async Parse(data: any): Promise<any> {
+	public static async Parse(data: any): Promise<Value> {
 		return data;
 	}
 }
@@ -141,7 +141,7 @@ export class Empty {
 	public ToProtoJSON(): {} {
 		return {};
 	}
-	public static async Parse(_: any): Promise<{}> {
-		return {}
+	public static async Parse(_: any): Promise<Empty> {
+		return new Empty();
 	}
 }
