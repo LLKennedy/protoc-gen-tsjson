@@ -309,8 +309,17 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 	}
 }
 
+type mapTypeData struct {
+}
+
 func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName string, content *strings.Builder, fileExports []string) {
 	content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object implements tsjson.ProtoJSONCompatible {\n", comment, name))
+	mapTypes := map[string]mapTypeData{}
+	for _, nested := range msg.GetNestedType() {
+		if nested.GetOptions().GetMapEntry() {
+			mapTypes[fmt.Sprintf(".%s.%s.%s", pkgName, msg.GetName(), nested.GetName())] = mapTypeData{}
+		}
+	}
 	for _, field := range msg.GetField() {
 		if field.GetTypeName() == ".google.protobuf.NullValue" {
 			continue
@@ -400,13 +409,19 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 			}
 		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 			tsType := getNativeTypeName(field, msg, pkgName, fileExports)
-			switch label {
-			case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			_, isMap := mapTypes[field.GetTypeName()]
+			switch {
+			case isMap:
+				protoJSONContent.WriteString(fmt.Sprintf(`			%s: tsjson.ToProtoJSON.Map(TODO, this.%s),
+`, field.GetJsonName(), field.GetJsonName()))
+				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Map(objData, "%s", "%s", TODO);
+`, field.GetJsonName(), field.GetJsonName(), field.GetName()))
+			case label == descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
 				protoJSONContent.WriteString(fmt.Sprintf(`			%s: this.%s?.ToProtoJSON(),
 `, field.GetJsonName(), field.GetJsonName()))
 				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Message(objData, "%s", "%s", %s.Parse);
 `, field.GetJsonName(), field.GetJsonName(), field.GetName(), tsType))
-			case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			case label == descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
 				protoJSONContent.WriteString(fmt.Sprintf(`			%s: tsjson.ToProtoJSON.Repeated(this.%s?.ToProtoJSON, this.%s),
 `, field.GetJsonName(), field.GetJsonName(), field.GetJsonName()))
 				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Repeated(objData, "%s", "%s", %s.Parse);
