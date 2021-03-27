@@ -64,4 +64,5 @@ message RootMessage {
 	google.protobuf.Value val = 10;
 	google.protobuf.NullValue nlvl = 11;
 	google.protobuf.Empty empty = 12;
+	map<int32, google.protobuf.Duration> complex = 14;
 }
