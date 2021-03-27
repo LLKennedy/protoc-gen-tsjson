@@ -448,7 +448,7 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			parse = fmt.Sprintf(`tsjson.Parse.Enum(%s, "%s", "%s", %s)`, obj, field.GetJsonName(), field.GetName(), tsType)
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
 			trimmedType := tsType[:len(tsType)-2]
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => tsjson.ToProtoJSON.String(%s, val), %s)`, trimmedType, inputName)
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => tsjson.ToProtoJSON.Enum(%s, val), %s)`, trimmedType, inputName)
 			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Enum(%s))`, obj, field.GetJsonName(), field.GetName(), trimmedType)
 		}
 	}
