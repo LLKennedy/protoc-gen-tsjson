@@ -311,6 +311,9 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 }
 
 type mapTypeData struct {
+	toProtoJSON string
+	parse       string
+	keyIsString bool
 }
 
 func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName string, content *strings.Builder, fileExports []string) {
@@ -318,7 +321,12 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 	mapTypes := map[string]mapTypeData{}
 	for _, nested := range msg.GetNestedType() {
 		if nested.GetOptions().GetMapEntry() {
-			mapTypes[fmt.Sprintf(".%s.%s.%s", pkgName, msg.GetName(), nested.GetName())] = mapTypeData{}
+			mapToProtoJSON, mapParse := generateMarshallingStrings(nested.GetField()[1], msg, pkgName, fileExports, mapTypes, "val", `{"value":val}`)
+			mapTypes[fmt.Sprintf(".%s.%s.%s", pkgName, msg.GetName(), nested.GetName())] = mapTypeData{
+				toProtoJSON: mapToProtoJSON,
+				parse:       mapParse,
+				keyIsString: nested.GetField()[0].GetType() == descriptorpb.FieldDescriptorProto_TYPE_STRING,
+			}
 		}
 	}
 	for _, field := range msg.GetField() {
@@ -340,7 +348,7 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 `, name))
 	// Build ToProtoJSON/Parser functions
 	for _, field := range msg.GetField() {
-		toProtoJSON, parse := generateMarshallingStrings(field, msg, pkgName, fileExports, mapTypes)
+		toProtoJSON, parse := generateMarshallingStrings(field, msg, pkgName, fileExports, mapTypes, "this."+field.GetJsonName(), "objData")
 		if toProtoJSON == "" && parse == "" {
 			// TODO: eventually panic here, this should never happen
 			log.Println("skipping field for now: " + field.GetName())
@@ -364,74 +372,72 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 	content.WriteString("}\n\n")
 }
 
-func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto, pkgName string, fileExports []string, mapTypes map[string]mapTypeData) (toProtoJSON, parse string) {
+func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto, pkgName string, fileExports []string, mapTypes map[string]mapTypeData, inputName string, obj string) (toProtoJSON, parse string) {
 	label := field.GetLabel()
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bool(this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Bool(objData, "%s", "%s")`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bool(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Bool(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bool, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.Bool())`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bool, %s)`, field.GetJsonName())
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Bool())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bytes(this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Bytes(objData, "%s", "%s")`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bytes(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Bytes(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bytes, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.Bytes())`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bytes, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Bytes())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SINT32:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Number(this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Number(objData, "%s", "%s")`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Number(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Number(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Number, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.Number())`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Number, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Number())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64, descriptorpb.FieldDescriptorProto_TYPE_SFIXED64, descriptorpb.FieldDescriptorProto_TYPE_UINT64, descriptorpb.FieldDescriptorProto_TYPE_SINT64, descriptorpb.FieldDescriptorProto_TYPE_INT64:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.StringNumber(this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Number(objData, "%s", "%s")`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.StringNumber(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Number(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.StringNumber, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.Number())`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.StringNumber, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Number())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.String(this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.String(objData, "%s", "%s")`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.String(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.String(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.String, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.String())`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.String, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.String())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		tsType := getNativeTypeName(field, msg, pkgName, fileExports)
-		_, isMap := mapTypes[field.GetTypeName()]
+		mapStrings, isMap := mapTypes[field.GetTypeName()]
 		switch {
-		// case tsType == "google.protobuf.Any":
-		// case tsType == "google.protobuf.Timestamp":
-		// case tsType == "google.protobuf.Duration":
-		// case tsType == "google.protobuf.Struct":
-		// case tsType == "google.protobuf.Wrapper":
-		// case tsType == "google.protobuf.Timestamp":
 		case isMap:
 			// TODO: parsers and marshallers for all the different map keys and values, basically nesting this entire switch/case again
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Map(TODO, this.%s)`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Map(objData, "%s", "%s", TODO)`, field.GetJsonName(), field.GetName())
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Map(val => %s, %s)`, mapStrings.toProtoJSON, inputName)
+			if mapStrings.keyIsString {
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, %s)`, obj, field.GetJsonName(), field.GetName(), "val => val", mapStrings.parse)
+			} else {
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, val => %s)`, obj, field.GetJsonName(), field.GetName(), "JSON.parse", mapStrings.parse)
+			}
 		case label == descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
-			toProtoJSON = fmt.Sprintf(`this.%s?.ToProtoJSON()`, field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Message(objData, "%s", "%s", %s.Parse)`, field.GetJsonName(), field.GetName(), tsType)
+			toProtoJSON = fmt.Sprintf(`%s?.ToProtoJSON()`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Message(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType)
 		case label == descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(this.%s?.ToProtoJSON, this.%s)`, field.GetJsonName(), field.GetJsonName())
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(objData, "%s", "%s", %s.Parse)`, field.GetJsonName(), field.GetName(), tsType)
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(%s?.ToProtoJSON, %s)`, inputName, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType)
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
 		// TODO: enums
@@ -484,7 +490,7 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 			if nestedMessage.GetOptions().GetMapEntry() && strings.Contains(field.GetTypeName(), nestedMessage.GetName()) {
 				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil, pkgName, fileExports)
 				valType := getNativeTypeName(nestedMessage.GetField()[1], nil, pkgName, fileExports)
-				return fmt.Sprintf("Map<%s, %s>", keyType, valType)
+				return fmt.Sprintf("ReadonlyMap<%s, %s | null>", keyType, valType)
 			}
 		}
 		fieldTypeName := strings.TrimLeft(field.GetTypeName(), ".")
