@@ -40,7 +40,7 @@ enum RootTypes {
 message RootMessage {
 	Test test = 1000;
 	repeated Test tests = 1001;
-	RootTypes type = 1;
+	repeated RootTypes types = 1;
 	message Stuff {
 		int64 a = 1;
 		string b = 2;

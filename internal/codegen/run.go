@@ -447,8 +447,9 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Enum(%s, %s)`, tsType, inputName)
 			parse = fmt.Sprintf(`tsjson.Parse.Enum(%s, "%s", "%s", %s)`, obj, field.GetJsonName(), field.GetName(), tsType)
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
-			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.String, %s)`, inputName)
-			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.String())`, obj, field.GetJsonName(), field.GetName())
+			trimmedType := tsType[:len(tsType)-2]
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => tsjson.ToProtoJSON.String(%s, val), %s)`, trimmedType, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Enum(%s))`, obj, field.GetJsonName(), field.GetName(), trimmedType)
 		}
 	}
 	return
@@ -508,13 +509,14 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 			panic(fmt.Errorf("type name did not match any valid pattern: %s, found %d instead of 3: %s", typeName, len(matches), matches))
 		}
 		pkgSection := fmt.Sprintf("%s__", matches[1])
-		typeSection := strings.ReplaceAll(matches[2], ".", "__") + repeatedStr
+		typeSection := strings.ReplaceAll(matches[2], ".", "__")
+		fullTypeSection := typeSection + repeatedStr
 		for _, exp := range fileExports {
 			if exp == typeSection {
-				return typeSection
+				return fullTypeSection
 			}
 		}
-		return fmt.Sprintf("%s%s", pkgSection, typeSection)
+		return fmt.Sprintf("%s%s", pkgSection, fullTypeSection)
 	default:
 		panic(fmt.Errorf("unknown field type: %s", field))
 	}
