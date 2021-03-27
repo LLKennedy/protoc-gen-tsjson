@@ -398,14 +398,22 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Repeated(objData, "%s", "%s", tsjson.PrimitiveParse.String());
 `, field.GetJsonName(), field.GetJsonName(), field.GetName()))
 			}
-		case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
-			// TODO
+		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+			tsType := getNativeTypeName(field, msg, pkgName, fileExports)
 			switch label {
 			case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+				protoJSONContent.WriteString(fmt.Sprintf(`			%s: this.%s?.ToProtoJSON(),
+`, field.GetJsonName(), field.GetJsonName()))
+				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Message(objData, "%s", "%s", %s.Parse);
+`, field.GetJsonName(), field.GetJsonName(), field.GetName(), tsType))
 			case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+				protoJSONContent.WriteString(fmt.Sprintf(`			%s: tsjson.ToProtoJSON.Repeated(this.%s?.ToProtoJSON, this.%s),
+`, field.GetJsonName(), field.GetJsonName(), field.GetJsonName()))
+				parseContent.WriteString(fmt.Sprintf(`		res.%s = await tsjson.Parse.Repeated(objData, "%s", "%s", %s.Parse);
+`, field.GetJsonName(), field.GetJsonName(), field.GetName(), tsType))
 			}
-		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-			// TODO
+		case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+			// TODO: enums
 			switch label {
 			case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
 			case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
