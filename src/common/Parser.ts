@@ -196,35 +196,35 @@ export class Parse {
 		return ParseIfNotNull(obj, prop, altProp, PrimitiveParse.Number(), ["string", "number"]);
 	}
 	/** Parse a google Any */
-	public static async Any(obj: Object, prop: string, altProp: string): Promise<any | undefined> {
+	public static async Any(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Any | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Any.Parse)
 	}
 	/** Parse a google Timestamp */
-	public static async Timestamp(obj: Object, prop: string, altProp: string): Promise<Date | undefined> {
+	public static async Timestamp(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Timestamp | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Timestamp.Parse)
 	}
 	/** Parse a google Duration */
-	public static async Duration(obj: Object, prop: string, altProp: string): Promise<number | undefined> {
+	public static async Duration(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Duration | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Duration.Parse)
 	}
 	/** Parse a google Struct */
-	public static async Struct(obj: Object, prop: string, altProp: string): Promise<any | undefined> {
+	public static async Struct(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Struct | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Struct.Parse)
 	}
 	/** Parse a google Wrapper */
-	public static async Wrapper(obj: Object, prop: string, altProp: string): Promise<any | undefined> {
+	public static async Wrapper(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Wrapper | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Wrapper.Parse)
 	}
 	/** Parse a google FieldMask */
-	public static async FieldMask(obj: Object, prop: string, altProp: string): Promise<any | undefined> {
+	public static async FieldMask(obj: Object, prop: string, altProp: string): Promise<google.protobuf.FieldMask | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.FieldMask.Parse)
 	}
 	/** Parse a google ListValue */
-	public static async ListValue(obj: Object, prop: string, altProp: string): Promise<any[] | undefined> {
+	public static async ListValue(obj: Object, prop: string, altProp: string): Promise<google.protobuf.ListValue | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.ListValue.Parse)
 	}
 	/** Parse a google Value */
-	public static async Value(obj: Object, prop: string, altProp: string): Promise<any | undefined> {
+	public static async Value(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Value | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Value.Parse)
 	}
 	/** Parse a google NullValue */
@@ -233,7 +233,7 @@ export class Parse {
 		return null
 	}
 	/** Parse a google Empty */
-	public static async Empty(obj: Object, prop: string, altProp: string): Promise<{} | undefined> {
+	public static async Empty(obj: Object, prop: string, altProp: string): Promise<google.protobuf.Empty | undefined> {
 		return ParseIfNotNull(obj, prop, altProp, google.protobuf.Empty.Parse)
 	}
 }
