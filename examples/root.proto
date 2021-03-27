@@ -56,7 +56,7 @@ message RootMessage {
 	Stuff stuff = 3;
 	repeated string names = 4;
 	map<int32, string> data = 5;
-	google.protobuf.Timestamp ts = 6;
+	repeated google.protobuf.Timestamp ts = 6;
 	google.protobuf.Any any = 7;
 	google.protobuf.Duration dur = 8;
 	google.protobuf.Struct str = 9;

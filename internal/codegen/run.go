@@ -498,7 +498,7 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 		fieldTypeName := strings.TrimLeft(field.GetTypeName(), ".")
 		if len(fieldTypeName) >= len(googleProtobufPrefix) && fieldTypeName[:len(googleProtobufPrefix)] == googleProtobufPrefix {
 			// This is a google well-known type
-			return fieldTypeName
+			return fieldTypeName + repeatedStr
 		}
 		// Not a map, not a google type
 		fallthrough
