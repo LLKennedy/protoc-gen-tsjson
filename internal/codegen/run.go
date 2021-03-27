@@ -411,6 +411,12 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 			tsType := getNativeTypeName(field, msg, pkgName, fileExports)
 			_, isMap := mapTypes[field.GetTypeName()]
 			switch {
+			case tsType == "google.protobuf.Any":
+			case tsType == "google.protobuf.Timestamp":
+			case tsType == "google.protobuf.Duration":
+			case tsType == "google.protobuf.Struct":
+			case tsType == "google.protobuf.Wrapper":
+			case tsType == "google.protobuf.Timestamp":
 			case isMap:
 				// TODO: parsers and marshallers for all the different map keys and values, basically nesting this entire switch/case again
 				protoJSONContent.WriteString(fmt.Sprintf(`			%s: tsjson.ToProtoJSON.Map(TODO, this.%s),
@@ -447,6 +453,10 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 	}
 `, protoJSONContent.String(), name, parseContent.String()))
 	content.WriteString("}\n\n")
+}
+
+func generateMarshallingStrings() {
+
 }
 
 func generateServices(services []*descriptorpb.ServiceDescriptorProto, content *strings.Builder) {
