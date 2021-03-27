@@ -39,16 +39,24 @@ enum RootTypes {
 // RootMessage is the only message in the top level file, which uses other imported messages to demonstrate linking
 message RootMessage {
 	Test test = 1000;
-	RootTypes type = 1;
+	repeated Test tests = 1001;
+	repeated RootTypes types = 1;
 	message Stuff {
 		int64 a = 1;
 		string b = 2;
 		bool c = 3;
 	};
+	oneof choice {
+		string first = 100;
+		bool second = 101;
+		RootMessage.Stuff third = 102;
+		RootTypes fourth = 103;
+		Test fifth = 104;
+	};
 	Stuff stuff = 3;
 	repeated string names = 4;
 	map<int32, string> data = 5;
-	google.protobuf.Timestamp ts = 6;
+	repeated google.protobuf.Timestamp ts = 6;
 	google.protobuf.Any any = 7;
 	google.protobuf.Duration dur = 8;
 	google.protobuf.Struct str = 9;
@@ -56,4 +64,5 @@ message RootMessage {
 	google.protobuf.Value val = 10;
 	google.protobuf.NullValue nlvl = 11;
 	google.protobuf.Empty empty = 12;
+	map<int32, google.protobuf.Duration> complex = 14;
 }

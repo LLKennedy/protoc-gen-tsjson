@@ -1,6 +1,6 @@
 {
   "name": "@llkennedy/protoc-gen-tsjson",
-  "version": "0.4.0",
+  "version": "0.5.0-pre7",
   "description": "Typescript bindings for canonical JSON representation of gRPC messages.",
   "scripts": {
     "build": "rimraf ./lib && tsc",
@@ -33,11 +33,15 @@
   "author": "Luke Kennedy",
   "license": "MIT",
   "files": [
-    "tsjson.proto",
-    "lib"
+    "lib",
+    "src",
+    "tsjson.proto"
   ],
   "bugs": {
     "url": "https://github.com/LLKennedy/protoc-gen-tsjson/issues"
   },
-  "homepage": "https://github.com/LLKennedy/protoc-gen-tsjson#readme"
+  "homepage": "https://github.com/LLKennedy/protoc-gen-tsjson#readme",
+  "dependencies": {
+    "rfc4648": "^1.4.0"
+  }
 }

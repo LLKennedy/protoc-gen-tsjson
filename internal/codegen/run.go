@@ -167,8 +167,6 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports
 	// Messages
 	exports, _ := impexp.fileTypeMap[fileName]
 	generateMessages(f.GetMessageType(), content, f.GetPackage(), exports)
-	// Services
-	generateServices(f.GetService(), content)
 	// Comments? unclear how to link them back to other elements
 	generateComments(f.GetSourceCodeInfo(), content)
 	out.Content = proto.String(content.String())
@@ -176,6 +174,10 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports
 }
 
 func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Builder, impexp importsExports) {
+	if len(f.GetMessageType()) > 0 {
+		// All messages need the common imports
+		content.WriteString("import * as tsjson from \"@llkennedy/protoc-gen-tsjson\";\n")
+	}
 	importMap := make(map[string][]string)
 	useGoogle := false
 	for _, msg := range f.GetMessageType() {
@@ -254,7 +256,15 @@ FIELD_IMPORT_LOOP:
 			importPath = fmt.Sprintf("%s/%s", details.npmPackage, details.importPath)
 		}
 		imports, _ := importMap[importPath]
-		imports = append(imports, fmt.Sprintf("%s as %s__%s", trueName, pkgName, trueName))
+		uniqueImports := map[string]struct{}{}
+		for _, anImport := range imports {
+			uniqueImports[anImport] = struct{}{}
+		}
+		uniqueImports[fmt.Sprintf("%s as %s__%s", trueName, pkgName, trueName)] = struct{}{}
+		imports = []string{}
+		for anImport := range uniqueImports {
+			imports = append(imports, anImport)
+		}
 		for _, exp := range impexp.fileTypeMap[fileName] {
 			if exp == trueName {
 				// This is local, skip
@@ -285,42 +295,164 @@ func generateMessages(messages []*descriptorpb.DescriptorProto, content *strings
 	for _, message := range messages {
 		// TODO: get comment data somehow
 		comment := "A message"
-		content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object {\n", comment, message.GetName()))
-		for _, field := range message.GetField() {
-			if field.GetTypeName() == ".google.protobuf.NullValue" {
-				continue
-			}
-			tsType := getNativeTypeName(field, message, pkgName, fileExports)
-			// FIXME: detect repeated/oneof?
-			// TODO: get comment data somehow
-			comment = "A field"
-			content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
-		}
-		content.WriteString("}\n\n")
-
+		generateMessage(message, comment, message.GetName(), pkgName, content, fileExports)
 		for _, nestedType := range message.GetNestedType() {
 			if !nestedType.GetOptions().GetMapEntry() {
 				// TODO: get comment data somehow
 				comment = "A message"
-				content.WriteString(fmt.Sprintf("/** %s */\nexport class %s__%s extends Object {\n", comment, message.GetName(), nestedType.GetName()))
-				for _, nestedField := range nestedType.GetField() {
-					if nestedField.GetTypeName() == ".google.protobuf.NullValue" {
-						continue
-					}
-					tsType := getNativeTypeName(nestedField, nestedType, pkgName, fileExports)
-					// FIXME: detect repeated/oneof?
-					// TODO: get comment data somehow
-					comment = "A field"
-					content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, nestedField.GetJsonName(), tsType))
-				}
-				content.WriteString("}\n\n")
+				name := fmt.Sprintf("%s__%s", message.GetName(), nestedType.GetName())
+				generateMessage(nestedType, comment, name, pkgName, content, fileExports)
 			}
 		}
 	}
 }
 
-func generateServices(services []*descriptorpb.ServiceDescriptorProto, content *strings.Builder) {
+type mapTypeData struct {
+	toProtoJSON string
+	parse       string
+	keyIsString bool
+}
 
+func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName string, content *strings.Builder, fileExports []string) {
+	content.WriteString(fmt.Sprintf("/** %s */\nexport class %s extends Object implements tsjson.ProtoJSONCompatible {\n", comment, name))
+	mapTypes := map[string]mapTypeData{}
+	for _, nested := range msg.GetNestedType() {
+		if nested.GetOptions().GetMapEntry() {
+			mapToProtoJSON, mapParse := generateMarshallingStrings(nested.GetField()[1], msg, pkgName, fileExports, mapTypes, "val", `{"value":val}`)
+			mapTypes[fmt.Sprintf(".%s.%s.%s", pkgName, msg.GetName(), nested.GetName())] = mapTypeData{
+				toProtoJSON: mapToProtoJSON,
+				parse:       mapParse,
+				keyIsString: nested.GetField()[0].GetType() == descriptorpb.FieldDescriptorProto_TYPE_STRING,
+			}
+		}
+	}
+	for _, field := range msg.GetField() {
+		if field.GetTypeName() == ".google.protobuf.NullValue" {
+			continue
+		}
+		tsType := getNativeTypeName(field, msg, pkgName, fileExports)
+		// FIXME: detect repeated/oneof?
+		// TODO: get comment data somehow
+		comment = "A field"
+		content.WriteString(fmt.Sprintf("	/** %s */\n	public %s?: %s;\n", comment, field.GetJsonName(), tsType))
+	}
+	protoJSONContent := &strings.Builder{}
+	protoJSONContent.WriteString(`		return {
+`)
+	parseContent := &strings.Builder{}
+	parseContent.WriteString(fmt.Sprintf(`		let objData: Object = tsjson.AnyToObject(data);
+		let res = new %s();
+`, name))
+	// Build ToProtoJSON/Parser functions
+	for _, field := range msg.GetField() {
+		toProtoJSON, parse := generateMarshallingStrings(field, msg, pkgName, fileExports, mapTypes, "this."+field.GetJsonName(), "objData")
+		if toProtoJSON == "" && parse == "" {
+			if field.GetTypeName() == ".google.protobuf.NullValue" {
+				continue
+			}
+			panic(fmt.Sprintf("unhandled type: %s", field.GetTypeName()))
+		}
+		protoJSONContent.WriteString(fmt.Sprintf(`			%s: %s,
+`, field.GetJsonName(), toProtoJSON))
+		parseContent.WriteString(fmt.Sprintf(`		res.%s = await %s;
+`, field.GetJsonName(), parse))
+	}
+	protoJSONContent.WriteString(`		};`)
+	parseContent.WriteString(`		return res;`)
+
+	content.WriteString(fmt.Sprintf(`	public ToProtoJSON(): Object {
+%s
+	}
+	public static async Parse(data: any): Promise<%s> {
+%s
+	}
+`, protoJSONContent.String(), name, parseContent.String()))
+	content.WriteString("}\n\n")
+}
+
+func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto, pkgName string, fileExports []string, mapTypes map[string]mapTypeData, inputName string, obj string) (toProtoJSON, parse string) {
+	label := field.GetLabel()
+	tsType := getNativeTypeName(field, msg, pkgName, fileExports)
+	switch field.GetType() {
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bool(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Bool(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bool, %s)`, field.GetJsonName())
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Bool())`, obj, field.GetJsonName(), field.GetName())
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Bytes(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Bytes(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bytes, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Bytes())`, obj, field.GetJsonName(), field.GetName())
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Number(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Number(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Number, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Number())`, obj, field.GetJsonName(), field.GetName())
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64, descriptorpb.FieldDescriptorProto_TYPE_SFIXED64, descriptorpb.FieldDescriptorProto_TYPE_UINT64, descriptorpb.FieldDescriptorProto_TYPE_SINT64, descriptorpb.FieldDescriptorProto_TYPE_INT64:
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.StringNumber(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Number(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.StringNumber, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Number())`, obj, field.GetJsonName(), field.GetName())
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.String(%s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.String(%s, "%s", "%s")`, obj, field.GetJsonName(), field.GetName())
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.String, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.String())`, obj, field.GetJsonName(), field.GetName())
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		mapStrings, isMap := mapTypes[field.GetTypeName()]
+		switch {
+		case isMap:
+			// TODO: parsers and marshallers for all the different map keys and values, basically nesting this entire switch/case again
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Map(val => %s, %s)`, mapStrings.toProtoJSON, inputName)
+			if mapStrings.keyIsString {
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, %s)`, obj, field.GetJsonName(), field.GetName(), "val => val", mapStrings.parse)
+			} else {
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, val => %s)`, obj, field.GetJsonName(), field.GetName(), "JSON.parse", mapStrings.parse)
+			}
+		case label == descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`%s?.ToProtoJSON()`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Message(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType)
+		case label == descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => val.ToProtoJSON(), %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType[:len(tsType)-2])
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		if tsType == "google__protobuf__NullValue" {
+			return
+		}
+		// TODO: enums
+		switch label {
+		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Enum(%s, %s)`, tsType, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Enum(%s, "%s", "%s", %s)`, obj, field.GetJsonName(), field.GetName(), tsType)
+		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			trimmedType := tsType[:len(tsType)-2]
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => tsjson.ToProtoJSON.Enum(%s, val), %s)`, trimmedType, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Enum(%s))`, obj, field.GetJsonName(), field.GetName(), trimmedType)
+		}
+	}
+	return
 }
 
 func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *strings.Builder) {
@@ -360,13 +492,13 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 			if nestedMessage.GetOptions().GetMapEntry() && strings.Contains(field.GetTypeName(), nestedMessage.GetName()) {
 				keyType := getNativeTypeName(nestedMessage.GetField()[0], nil, pkgName, fileExports)
 				valType := getNativeTypeName(nestedMessage.GetField()[1], nil, pkgName, fileExports)
-				return fmt.Sprintf("Map<%s, %s>", keyType, valType)
+				return fmt.Sprintf("ReadonlyMap<%s, %s | null>", keyType, valType)
 			}
 		}
 		fieldTypeName := strings.TrimLeft(field.GetTypeName(), ".")
 		if len(fieldTypeName) >= len(googleProtobufPrefix) && fieldTypeName[:len(googleProtobufPrefix)] == googleProtobufPrefix {
 			// This is a google well-known type
-			return fieldTypeName
+			return fieldTypeName + repeatedStr
 		}
 		// Not a map, not a google type
 		fallthrough
@@ -377,13 +509,14 @@ func getNativeTypeName(field *descriptorpb.FieldDescriptorProto, message *descri
 			panic(fmt.Errorf("type name did not match any valid pattern: %s, found %d instead of 3: %s", typeName, len(matches), matches))
 		}
 		pkgSection := fmt.Sprintf("%s__", matches[1])
-		typeSection := strings.ReplaceAll(matches[2], ".", "__") + repeatedStr
+		typeSection := strings.ReplaceAll(matches[2], ".", "__")
+		fullTypeSection := typeSection + repeatedStr
 		for _, exp := range fileExports {
 			if exp == typeSection {
-				return typeSection
+				return fullTypeSection
 			}
 		}
-		return fmt.Sprintf("%s%s", pkgSection, typeSection)
+		return fmt.Sprintf("%s%s", pkgSection, fullTypeSection)
 	default:
 		panic(fmt.Errorf("unknown field type: %s", field))
 	}
