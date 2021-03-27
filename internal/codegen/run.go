@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -168,8 +167,6 @@ func generateFullFile(f *descriptorpb.FileDescriptorProto, impexp importsExports
 	// Messages
 	exports, _ := impexp.fileTypeMap[fileName]
 	generateMessages(f.GetMessageType(), content, f.GetPackage(), exports)
-	// Services
-	generateServices(f.GetService(), content)
 	// Comments? unclear how to link them back to other elements
 	generateComments(f.GetSourceCodeInfo(), content)
 	out.Content = proto.String(content.String())
@@ -350,9 +347,10 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 	for _, field := range msg.GetField() {
 		toProtoJSON, parse := generateMarshallingStrings(field, msg, pkgName, fileExports, mapTypes, "this."+field.GetJsonName(), "objData")
 		if toProtoJSON == "" && parse == "" {
-			// TODO: eventually panic here, this should never happen
-			log.Println("skipping field for now: " + field.GetName())
-			continue
+			if field.GetTypeName() == ".google.protobuf.NullValue" {
+				continue
+			}
+			panic(fmt.Sprintf("unhandled type: %s", field.GetTypeName()))
 		}
 		protoJSONContent.WriteString(fmt.Sprintf(`			%s: %s,
 `, field.GetJsonName(), toProtoJSON))
@@ -374,6 +372,7 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 
 func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto, pkgName string, fileExports []string, mapTypes map[string]mapTypeData, inputName string, obj string) (toProtoJSON, parse string) {
 	label := field.GetLabel()
+	tsType := getNativeTypeName(field, msg, pkgName, fileExports)
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
 		switch label {
@@ -421,7 +420,6 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.String())`, obj, field.GetJsonName(), field.GetName())
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-		tsType := getNativeTypeName(field, msg, pkgName, fileExports)
 		mapStrings, isMap := mapTypes[field.GetTypeName()]
 		switch {
 		case isMap:
@@ -440,17 +438,20 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType[:len(tsType)-2])
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		if tsType == "google__protobuf__NullValue" {
+			return
+		}
 		// TODO: enums
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Enum(%s, %s)`, tsType, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Enum(%s, "%s", "%s", %s)`, obj, field.GetJsonName(), field.GetName(), tsType)
 		case descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
+			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.String, %s)`, inputName)
+			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.String())`, obj, field.GetJsonName(), field.GetName())
 		}
 	}
 	return
-}
-
-func generateServices(services []*descriptorpb.ServiceDescriptorProto, content *strings.Builder) {
-
 }
 
 func generateComments(sourceCodeInfo *descriptorpb.SourceCodeInfo, content *strings.Builder) {
