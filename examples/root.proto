@@ -39,6 +39,7 @@ enum RootTypes {
 // RootMessage is the only message in the top level file, which uses other imported messages to demonstrate linking
 message RootMessage {
 	Test test = 1000;
+	repeated Test tests = 1001;
 	RootTypes type = 1;
 	message Stuff {
 		int64 a = 1;
