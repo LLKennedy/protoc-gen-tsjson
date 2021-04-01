@@ -392,7 +392,7 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(tsjson.ToProtoJSON.Bytes, %s)`, inputName)
 			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", tsjson.PrimitiveParse.Bytes())`, obj, field.GetJsonName(), field.GetName())
 		}
-	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT, descriptorpb.FieldDescriptorProto_TYPE_FIXED32, descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32, descriptorpb.FieldDescriptorProto_TYPE_SINT32, descriptorpb.FieldDescriptorProto_TYPE_UINT32:
 		switch label {
 		case descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
 			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Number(%s)`, inputName)
