@@ -373,6 +373,10 @@ func generateMessage(msg *descriptorpb.DescriptorProto, comment, name, pkgName s
 func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto, pkgName string, fileExports []string, mapTypes map[string]mapTypeData, inputName string, obj string) (toProtoJSON, parse string) {
 	label := field.GetLabel()
 	tsType := getNativeTypeName(field, msg, pkgName, fileExports)
+	nestedObjectPrefix := ""
+	if obj == `{"value":val}` {
+		nestedObjectPrefix = `async val => `
+	}
 	switch field.GetType() {
 	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
 		switch label {
@@ -426,13 +430,13 @@ func generateMarshallingStrings(field *descriptorpb.FieldDescriptorProto, msg *d
 			// TODO: parsers and marshallers for all the different map keys and values, basically nesting this entire switch/case again
 			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Map(val => %s, %s)`, mapStrings.toProtoJSON, inputName)
 			if mapStrings.keyIsString {
-				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, %s)`, obj, field.GetJsonName(), field.GetName(), "val => val", mapStrings.parse)
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", async val => val, %s)`, obj, field.GetJsonName(), field.GetName(), mapStrings.parse)
 			} else {
-				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, val => %s)`, obj, field.GetJsonName(), field.GetName(), "JSON.parse", mapStrings.parse)
+				parse = fmt.Sprintf(`tsjson.Parse.Map(%s, "%s", "%s", %s, async val => %s)`, obj, field.GetJsonName(), field.GetName(), "JSON.parse", mapStrings.parse)
 			}
 		case label == descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL:
 			toProtoJSON = fmt.Sprintf(`%s?.ToProtoJSON()`, inputName)
-			parse = fmt.Sprintf(`tsjson.Parse.Message(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType)
+			parse = fmt.Sprintf(`%stsjson.Parse.Message(%s, "%s", "%s", %s.Parse)`, nestedObjectPrefix, obj, field.GetJsonName(), field.GetName(), tsType)
 		case label == descriptorpb.FieldDescriptorProto_LABEL_REPEATED:
 			toProtoJSON = fmt.Sprintf(`tsjson.ToProtoJSON.Repeated(val => val.ToProtoJSON(), %s)`, inputName)
 			parse = fmt.Sprintf(`tsjson.Parse.Repeated(%s, "%s", "%s", %s.Parse)`, obj, field.GetJsonName(), field.GetName(), tsType[:len(tsType)-2])

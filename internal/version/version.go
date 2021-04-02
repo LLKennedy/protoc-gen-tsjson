@@ -12,7 +12,7 @@ const (
 	// Minor is the minor version of the tool
 	Minor = 5
 	// Patch is the patch version of the tool
-	Patch = 0
+	Patch = 2
 )
 
 // GetVersionString generates a version string based on the constants in this package
