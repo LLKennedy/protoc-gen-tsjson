@@ -181,20 +181,29 @@ func generateImports(f *descriptorpb.FileDescriptorProto, content *strings.Build
 	importMap := make(map[string][]string)
 	useGoogle := false
 	for _, msg := range f.GetMessageType() {
-		useGoogle = useGoogle || generateImportsForMessage(f, msg, importMap, content, impexp)
+		useGoogle = generateImportsForMessage(f, msg, importMap, content, impexp) || useGoogle
 	}
 	if useGoogle {
 		content.WriteString("import { google } from \"@llkennedy/protoc-gen-tsjson\";\n")
+	}
+	prefix := "./"
+	currentParts := strings.Split(f.GetName(), "/")
+	if len(currentParts) > 1 {
+		prefix = ""
+	}
+	for i := 1; i < len(currentParts); i++ {
+		prefix += "../"
 	}
 	for importPath, imports := range importMap {
 		fullImportList := &strings.Builder{}
 		for i, imp := range imports {
 			if i != 0 {
-				fullImportList.WriteString(", ")
+				fullImportList.WriteString(",")
 			}
+			fullImportList.WriteString("\n	")
 			fullImportList.WriteString(imp)
 		}
-		content.WriteString(fmt.Sprintf("import { %s } from \"%s\";\n", fullImportList.String(), importPath))
+		content.WriteString(fmt.Sprintf("import { %s\n} from \"%s%s\";\n", fullImportList.String(), prefix, importPath))
 	}
 	content.WriteString("\n")
 }
